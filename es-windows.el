@@ -147,12 +147,13 @@
                 "Select a window (type a large letter followed by ^, >, v, < or RET): "
               "Select window: ")))
   (let* (( help-message "
-Each number/letter represents an emacs window.
-Windows followed by H or V, are internal Horizontal or Vertical splitters.
-The last window is an external window, showing this buffer.
-Type the number/letter of the window you want, followed by
-^, >, v, <, in which case the window will be split in that direction,
-or RET, in which case the window itself will be used.
+Each number/letter represents an emacs window. Windows followed by H or V, are
+internal Horizontal or Vertical splitters. The last window is an external
+window, showing this buffer.
+
+Type the number of the window you want, followed by RET, and that window will be
+used. You can also type ^, >, v, or < instead of RET, in which case the window
+will be split in that direction.
 
 To prevent this message from showing, set `esw/be-helpful' to `nil'")
          ( spec (esw/save-windows))
@@ -187,6 +188,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
            (string-match "^\\([^Vv<>^]+\\)\\([Vv<>^]\\)?$" user-input)
            (setq selected-window (car (rassoc (match-string 1 user-input)
                                               window-id-map)))
+           (unless selected-window
+             (error "No window selected"))
            (setq user-input-action (match-string 2 user-input)))
       (mapc 'kill-buffer buffers)
       (esw/restore-windows spec))
@@ -204,7 +207,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                         ))))))
       (while (not (window-live-p selected-window))
         (unless selected-window
-          (error "Not a window."))
+          (error "Not a window"))
         (let ((children (esw/window-children selected-window)))
           (mapc 'delete-window (cl-rest children))
           (setq selected-window (car children)))
