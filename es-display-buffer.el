@@ -9,6 +9,16 @@
   "Face used for regular files in project-explorer sidebar."
   :group 'project-explorer)
 
+(defcustom edb-help-message "
+Each number/letter represents an emacs window.
+Windows followed by H or V, are internal Horizontal or Vertical splitters.
+The last window is an external window, showing this buffer.
+Type the number/letter of the window you want, followed by
+^, >, v, <, in which case the window will be split in that direction
+or RET, in which case the window itself will be used.
+
+To prevent this message from showing, set `edb-help-message' to `nil'"
+  "Instructions for edb.")
 
 (defun edb-window-children (window)
   (let* (( first-child (or (window-left-child window)
@@ -27,23 +37,16 @@
                          nconc (cl-loop for col from 1 to 10
                                         collect (nth (+ 1 (* 2 col) (* 30 row)) layout)))))
 
-(cl-defun edb-internal-window-tree (&optional (window (frame-root-window)))
-  (let (( children (edb-window-children window)))
-    (if children
-        (cons window (mapcar 'edb-internal-window-tree children))
-      window)))
-
 (cl-defun edb-internal-window-list (&optional (window (frame-root-window)))
   (let (( result (list window))
         ( fringe (list window))
-        new-fringe
-        ( children (edb-window-children window)))
+        new-fringe)
     (while fringe
       (cl-dolist (window fringe)
         (let ((children (edb-window-children window)))
           (when children
-            (cl-callf nconc result children)
-            (cl-callf nconc new-fringe children))))
+            (cl-callf append result children)
+            (cl-callf append new-fringe children))))
       (setq fringe new-fringe
             new-fringe nil))
     result))
@@ -51,7 +54,7 @@
 (defun edb-cover-window (window label)
   (let ((buffer (generate-new-buffer "edb")))
     (with-current-buffer buffer
-      (face-remap-add-relative 'default 'edb-label-face)
+      ;; (face-remap-add-relative 'default 'edb-label-face)
       (insert label)
       (setq cursor-type nil)
       (when (window-dedicated-p window)
@@ -64,23 +67,6 @@
           "H")
         ( (window-top-child window)
           "V")))
-
-(defun edb-window-label-1 (window)
-  (let (( string (prin1-to-string window))
-        ( type (cond ( (window-left-child window)
-                       "H-")
-                     ( (window-top-child window)
-                       "V-")
-                     ( t "")))
-        id)
-    (string-match "^#<window \\([[:digit:]]+\\)" string)
-    (setq id (match-string 1 string))
-    (concat type id)))
-
-(defun edb-window-label ()
-  (mapconcat 'edb-window-label-1
-             (es-window-lineage)
-             " "))
 
 (defun edb-window-list ()
   (cl-remove-if (lambda (win) (window-parameter win 'window-side))
@@ -107,9 +93,10 @@
       (set-window-point (car w) (cdr w)))
     (cl-dolist (w dedicated-windows)
       (set-window-dedicated-p w t))
-    (cl-loop for win in eobp-window-list
-             do (with-selected-window win
-                  (goto-char (point-max))))))
+    (cl-dolist (win eobp-window-list)
+      (with-selected-window win
+        (with-current-buffer (window-buffer win)
+          (goto-char (point-max)))))))
 
 (defun edb-prompt-for-window (prompt)
   (interactive (list "Select window: "))
@@ -129,12 +116,14 @@
                       (mapcar (lambda (window)
                                 (edb-cover-window
                                  window
-                                 (mapconcat (lambda (window)
-                                              (concat
-                                               (cdr (assoc window window-id-map))
-                                               (edb-window-type window)))
-                                            (es-window-lineage window)
-                                            " ")))
+                                 (concat (mapconcat (lambda (window)
+                                                      (concat
+                                                       (propertize (cdr (assoc window window-id-map))
+                                                                   'face 'edb-label-face)
+                                                       (edb-window-type window)))
+                                                    (es-window-lineage window)
+                                                    " ")
+                                         edb-help-message)))
                               windows))
                 (let* (( setup-custom-bindings
                          (lambda ()
@@ -168,7 +157,16 @@
                                  ("v" . below)
                                  ))))))
       (select-window selected-window)
+      (cl-dolist (win (nth 3 spec))
+        (with-selected-window win
+          (with-current-buffer (window-buffer win)
+            (goto-char (point-max)))))
       selected-window)))
+
+(defun edb-show-buffer (buffer)
+  (set-window-buffer (edb-prompt-for-window)
+                     buffer))
+
 
 (provide 'es-display-buffer)
 ;;; es-display-buffer.el ends here
