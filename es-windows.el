@@ -65,6 +65,12 @@ To prevent this message from showing, set `esw/help-message' to `nil'"
               children))
       (nreverse children))))
 
+(cl-defun esw/window-lineage (&optional (window (selected-window)))
+  "Result includes WINDOW"
+  (cl-loop for the-window = window then (window-parent the-window)
+           while the-window
+           collecting the-window))
+
 (defun esw/shortcuts ()
   (cl-remove-if (lambda (it) (member it '("V" "v")))
                 (cl-loop with layout = (split-string quail-keyboard-layout "")
@@ -159,13 +165,14 @@ To prevent this message from showing, set `esw/help-message' to `nil'"
                       (mapcar (lambda (window)
                                 (esw/cover-window
                                  window
-                                 (concat (mapconcat (lambda (window)
-                                                      (concat
-                                                       (propertize (cdr (assoc window window-id-map))
-                                                                   'face 'esw/label-face)
-                                                       (esw/window-type window)))
-                                                    (es-window-lineage window)
-                                                    " ")
+                                 (concat (mapconcat
+                                          (lambda (window)
+                                            (concat
+                                             (propertize (cdr (assoc window window-id-map))
+                                                         'face 'esw/label-face)
+                                             (esw/window-type window)))
+                                          (esw/window-lineage window)
+                                          " ")
                                          esw/help-message)))
                               windows))
                 (let* (( minibuffer-setup-hook
