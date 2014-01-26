@@ -97,9 +97,9 @@
 
 (defun esw/window-type (window)
   (cond ( (window-left-child window)
-          (propertize "H" 'face 'font-lock-warning-face))
+          "H")
         ( (window-top-child window)
-          (propertize "V" 'face 'font-lock-keyword-face))))
+          "V")))
 
 (defun esw/window-list ()
   (cl-remove-if (lambda (win) (window-parameter win 'window-side))
