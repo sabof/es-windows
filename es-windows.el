@@ -1,15 +1,48 @@
+;;; es-windows.el --- Window-management utilities
+
+;;; Version: 0.1
+;;; Author: sabof
+;;; URL: https://github.com/sabof/es-windows
+;;; Package-Requires: ((cl-lib "0.3") (es-lib "0.3"))
+
+;;; Commentary:
+
+;; The project is hosted at https://github.com/sabof/es-windows
+;; The latest version, and all the relevant information can be found there.
+
+;;; License:
+
+;; This file is NOT part of GNU Emacs.
+;;
+;; This program is free software; you can redistribute it and/or
+;; modify it under the terms of the GNU General Public License as
+;; published by the Free Software Foundation; either version 2, or (at
+;; your option) any later version.
+;;
+;; This program is distributed in the hope that it will be useful, but
+;; WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+;; General Public License for more details.
+;;
+;; You should have received a copy of the GNU General Public License
+;; along with this program ; see the file COPYING.  If not, write to
+;; the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+;; Boston, MA 02111-1307, USA.
+
+;;; Code:
+
 (require 'quail)
 (require 'cl-lib)
 (require 'es-lib)
 
 
-(defface edb-label-face
+(defface esw/label-face
     `((t (:inherit font-lock-function-name-face
                    :height ,(* 2 (face-attribute 'default :height)))))
   "Face used for regular files in project-explorer sidebar."
-  :group 'project-explorer)
+  :group 'es-windows)
 
-(defcustom edb-help-message "
+(defcustom esw/help-message "
 Each number/letter represents an emacs window.
 Windows followed by H or V, are internal Horizontal or Vertical splitters.
 The last window is an external window, showing this buffer.
@@ -17,10 +50,12 @@ Type the number/letter of the window you want, followed by
 ^, >, v, <, in which case the window will be split in that direction
 or RET, in which case the window itself will be used.
 
-To prevent this message from showing, set `edb-help-message' to `nil'"
-  "Instructions for edb.")
+To prevent this message from showing, set `esw/help-message' to `nil'"
+  "Instructions for esw."
+  :group 'es-windows
+  :type 'sexp)
 
-(defun edb-window-children (window)
+(defun esw/window-children (window)
   (let* (( first-child (or (window-left-child window)
                            (window-top-child window)))
          ( children (list first-child)))
@@ -30,20 +65,20 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
               children))
       (nreverse children))))
 
-(defun edb-shortcuts ()
+(defun esw/shortcuts ()
   (cl-remove-if (lambda (it) (member it '("V" "v")))
                 (cl-loop with layout = (split-string quail-keyboard-layout "")
                          for row from 1 to 4
                          nconc (cl-loop for col from 1 to 10
                                         collect (nth (+ 1 (* 2 col) (* 30 row)) layout)))))
 
-(cl-defun edb-internal-window-list (&optional (window (frame-root-window)))
+(cl-defun esw/internal-window-list (&optional (window (frame-root-window)))
   (let (( result (list window))
         ( fringe (list window))
         new-fringe)
     (while fringe
       (cl-dolist (window fringe)
-        (let ((children (edb-window-children window)))
+        (let ((children (esw/window-children window)))
           (when children
             (cl-callf append result children)
             (cl-callf append new-fringe children))))
@@ -51,10 +86,10 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
             new-fringe nil))
     result))
 
-(defun edb-cover-window (window label)
-  (let ((buffer (generate-new-buffer "edb")))
+(defun esw/cover-window (window label)
+  (let ((buffer (generate-new-buffer "esw")))
     (with-current-buffer buffer
-      ;; (face-remap-add-relative 'default 'edb-label-face)
+      ;; (face-remap-add-relative 'default 'esw/label-face)
       (insert label)
       (setq cursor-type nil)
       (when (window-dedicated-p window)
@@ -62,18 +97,18 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
       (set-window-buffer window buffer)
       buffer)))
 
-(defun edb-window-type (window)
+(defun esw/window-type (window)
   (cond ( (window-left-child window)
           "H")
         ( (window-top-child window)
           "V")))
 
-(defun edb-window-list ()
+(defun esw/window-list ()
   (cl-remove-if (lambda (win) (window-parameter win 'window-side))
                 (window-list nil nil (frame-first-window))))
 
-(defun edb-save-windows ()
-  (let ((windows (edb-window-list)))
+(defun esw/save-windows ()
+  (let ((windows (esw/window-list)))
     (list (current-window-configuration)
           (cl-remove-if-not 'window-dedicated-p windows)
           (mapcar (lambda (window) (cons window (window-point window)))
@@ -84,7 +119,15 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
                             windows)
           )))
 
-(defun edb-restore-windows (spec)
+(define-minor-mode esw/minibuffer-mode
+    "Custom esw keybindings for the minibuffer."
+  nil nil
+  (let ((map (make-sparse-keymap)))
+    (cl-dolist (key '("v" "V" "<" ">" "^"))
+      (define-key map key 'self-insert-and-exit))
+    map))
+
+(defun esw/restore-windows (spec)
   (cl-destructuring-bind
       (config dedicated-windows window-points eobp-window-list)
       spec
@@ -98,14 +141,14 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
         (with-current-buffer (window-buffer win)
           (goto-char (point-max)))))))
 
-(defun edb-prompt-for-window (prompt)
-  (interactive (list "Select window: "))
-  (let* (( spec (edb-save-windows))
-         ( windows (edb-window-list))
-         ( ids (edb-shortcuts))
+(defun esw/select-window (&optional prompt)
+  (interactive)
+  (let* (( spec (esw/save-windows))
+         ( windows (esw/window-list))
+         ( ids (esw/shortcuts))
          ( window-id-map (cl-mapcar (lambda (window id)
                                       (cons window id))
-                                    (edb-internal-window-list)
+                                    (esw/internal-window-list)
                                     ids))
          buffers
          user-input
@@ -114,36 +157,28 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
     (unwind-protect
          (progn (setq buffers
                       (mapcar (lambda (window)
-                                (edb-cover-window
+                                (esw/cover-window
                                  window
                                  (concat (mapconcat (lambda (window)
                                                       (concat
                                                        (propertize (cdr (assoc window window-id-map))
-                                                                   'face 'edb-label-face)
-                                                       (edb-window-type window)))
+                                                                   'face 'esw/label-face)
+                                                       (esw/window-type window)))
                                                     (es-window-lineage window)
                                                     " ")
-                                         edb-help-message)))
+                                         esw/help-message)))
                               windows))
-                (let* (( setup-custom-bindings
-                         (lambda ()
-                           (es-buffer-local-set-keys
-                             (kbd "v") 'self-insert-and-exit
-                             (kbd "V") 'self-insert-and-exit
-                             (kbd ">") 'self-insert-and-exit
-                             (kbd "<") 'self-insert-and-exit
-                             (kbd "^") 'self-insert-and-exit)))
-                       ( minibuffer-setup-hook
-                         (cons setup-custom-bindings
+                (let* (( minibuffer-setup-hook
+                         (cons 'esw/minibuffer-mode
                                minibuffer-setup-hook)))
-                  (setq user-input (read-string prompt)))
+                  (setq user-input (read-string (or prompt "Select window: "))))
                 (string-match "^\\(.+?\\)\\([Vv<>^]\\)?$" user-input)
                 (setq selected-window (car (rassoc (match-string 1 user-input) window-id-map)))
                 (setq user-input-action (match-string 2 user-input))
                 ;; (message "%s -- %s" selected-window user-input-action)
                 )
       (mapc 'kill-buffer buffers)
-      (edb-restore-windows spec))
+      (esw/restore-windows spec))
     (when selected-window
       (when user-input-action
         (cl-callf downcase user-input-action)
@@ -163,10 +198,9 @@ To prevent this message from showing, set `edb-help-message' to `nil'"
             (goto-char (point-max)))))
       selected-window)))
 
-(defun edb-show-buffer (buffer)
-  (set-window-buffer (edb-prompt-for-window)
+(defun esw/show-buffer (buffer)
+  (set-window-buffer (esw/select-window)
                      buffer))
 
-
-(provide 'es-display-buffer)
-;;; es-display-buffer.el ends here
+(provide 'es-windows)
+;;; es-windows.el ends here
