@@ -1,9 +1,9 @@
-;;; es-windows.el --- Window-management utilities
+;;; es-windows.el --- Window-management utilities -*- lexical-binding: t -*-
 
 ;;; Version: 0.1
 ;;; Author: sabof
 ;;; URL: https://github.com/sabof/es-windows
-;;; Package-Requires: ((cl-lib "0.3") (es-lib "0.3"))
+;;; Package-Requires: ((cl-lib "0.3"))
 
 ;;; Commentary:
 
@@ -33,8 +33,6 @@
 
 (require 'quail)
 (require 'cl-lib)
-(require 'es-lib)
-
 
 (defface esw/label-face
     `((t (:inherit font-lock-function-name-face
@@ -42,18 +40,10 @@
   "Face used for regular files in project-explorer sidebar."
   :group 'es-windows)
 
-(defcustom esw/help-message "
-Each number/letter represents an emacs window.
-Windows followed by H or V, are internal Horizontal or Vertical splitters.
-The last window is an external window, showing this buffer.
-Type the number/letter of the window you want, followed by
-^, >, v, <, in which case the window will be split in that direction
-or RET, in which case the window itself will be used.
-
-To prevent this message from showing, set `esw/help-message' to `nil'"
-  "Instructions for esw."
+(defcustom esw/be-helpful t
+  "Whether to show help messages"
   :group 'es-windows
-  :type 'sexp)
+  :type 'boolean)
 
 (defun esw/window-children (window)
   (let* (( first-child (or (window-left-child window)
@@ -67,9 +57,10 @@ To prevent this message from showing, set `esw/help-message' to `nil'"
 
 (cl-defun esw/window-lineage (&optional (window (selected-window)))
   "Result includes WINDOW"
-  (cl-loop for the-window = window then (window-parent the-window)
-           while the-window
-           collecting the-window))
+  (nreverse
+   (cl-loop for the-window = window then (window-parent the-window)
+            while the-window
+            collecting the-window)))
 
 (defun esw/shortcuts ()
   (cl-remove-if (lambda (it) (member it '("V" "v")))
@@ -97,6 +88,7 @@ To prevent this message from showing, set `esw/help-message' to `nil'"
     (with-current-buffer buffer
       ;; (face-remap-add-relative 'default 'esw/label-face)
       (insert label)
+      (goto-char (point-min))
       (setq cursor-type nil)
       (when (window-dedicated-p window)
         (set-window-dedicated-p window nil))
@@ -105,9 +97,9 @@ To prevent this message from showing, set `esw/help-message' to `nil'"
 
 (defun esw/window-type (window)
   (cond ( (window-left-child window)
-          "H")
+          (propertize "H" 'face 'font-lock-warning-face))
         ( (window-top-child window)
-          "V")))
+          (propertize "V" 'face 'font-lock-keyword-face))))
 
 (defun esw/window-list ()
   (cl-remove-if (lambda (win) (window-parameter win 'window-side))
@@ -147,63 +139,83 @@ To prevent this message from showing, set `esw/help-message' to `nil'"
         (with-current-buffer (window-buffer win)
           (goto-char (point-max)))))))
 
-(defun esw/select-window (&optional prompt)
+(cl-defun esw/select-window (&optional prompt)
   (interactive)
-  (let* (( spec (esw/save-windows))
+  (setq prompt
+        (or prompt
+            (if esw/be-helpful
+                "Select a window (type a large letter followed by ^, >, v, < or RET): "
+              "Select window: ")))
+  (let* (( help-message "
+Each number/letter represents an emacs window.
+Windows followed by H or V, are internal Horizontal or Vertical splitters.
+The last window is an external window, showing this buffer.
+Type the number/letter of the window you want, followed by
+^, >, v, <, in which case the window will be split in that direction,
+or RET, in which case the window itself will be used.
+
+To prevent this message from showing, set `esw/be-helpful' to `nil'")
+         ( spec (esw/save-windows))
          ( windows (esw/window-list))
-         ( ids (esw/shortcuts))
          ( window-id-map (cl-mapcar (lambda (window id)
                                       (cons window id))
                                     (esw/internal-window-list)
-                                    ids))
+                                    (esw/shortcuts)))
+         ( cover-window
+           (lambda (window)
+             (esw/cover-window
+              window
+              (concat (mapconcat (lambda (window)
+                                   (concat
+                                    (propertize (cdr (assoc window window-id-map))
+                                                'face 'esw/label-face)
+                                    (esw/window-type window)))
+                                 (esw/window-lineage window)
+                                 " ")
+                      (when esw/be-helpful help-message)))))
          buffers
-         user-input
          user-input-action
          selected-window)
+
     (unwind-protect
-         (progn (setq buffers
-                      (mapcar (lambda (window)
-                                (esw/cover-window
-                                 window
-                                 (concat (mapconcat
-                                          (lambda (window)
-                                            (concat
-                                             (propertize (cdr (assoc window window-id-map))
-                                                         'face 'esw/label-face)
-                                             (esw/window-type window)))
-                                          (esw/window-lineage window)
-                                          " ")
-                                         esw/help-message)))
-                              windows))
-                (let* (( minibuffer-setup-hook
-                         (cons 'esw/minibuffer-mode
-                               minibuffer-setup-hook)))
-                  (setq user-input (read-string (or prompt "Select window: "))))
-                (string-match "^\\(.+?\\)\\([Vv<>^]\\)?$" user-input)
-                (setq selected-window (car (rassoc (match-string 1 user-input) window-id-map)))
-                (setq user-input-action (match-string 2 user-input))
-                ;; (message "%s -- %s" selected-window user-input-action)
-                )
+         (let (( minibuffer-setup-hook
+                 (cons 'esw/minibuffer-mode
+                       minibuffer-setup-hook))
+               user-input)
+           (setq buffers (mapcar cover-window windows))
+           (setq user-input (read-string prompt))
+           (string-match "^\\([^Vv<>^]+\\)\\([Vv<>^]\\)?$" user-input)
+           (setq selected-window (car (rassoc (match-string 1 user-input)
+                                              window-id-map)))
+           (setq user-input-action (match-string 2 user-input)))
       (mapc 'kill-buffer buffers)
       (esw/restore-windows spec))
-    (when selected-window
-      (when user-input-action
-        (cl-callf downcase user-input-action)
-        (setq selected-window
-              (split-window
-               selected-window
-               nil (cdr (assoc user-input-action
-                               '((">" . right)
-                                 ("<" . left)
-                                 ("^" . above)
-                                 ("v" . below)
-                                 ))))))
-      (select-window selected-window)
-      (cl-dolist (win (nth 3 spec))
+
+    (if user-input-action
+        (progn (cl-callf downcase user-input-action)
+               (setq selected-window
+                     (split-window
+                      selected-window
+                      nil (cdr (assoc user-input-action
+                                      '((">" . right)
+                                        ("<" . left)
+                                        ("^" . above)
+                                        ("v" . below)
+                                        ))))))
+      (while (not (window-live-p selected-window))
+        (unless selected-window
+          (error "Not a window."))
+        (let ((children (esw/window-children selected-window)))
+          (mapc 'delete-window (cl-rest children))
+          (setq selected-window (car children)))
+        (set-window-dedicated-p selected-window nil)))
+    (select-window selected-window)
+    (cl-dolist (win (nth 3 spec))
+      (when (window-live-p win)
         (with-selected-window win
           (with-current-buffer (window-buffer win)
-            (goto-char (point-max)))))
-      selected-window)))
+            (goto-char (point-max))))))
+    selected-window))
 
 (defun esw/show-buffer (buffer)
   (set-window-buffer (esw/select-window)
