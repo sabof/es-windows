@@ -148,7 +148,7 @@
                 "Select a window (type a large number followed by ^, >, v, < or RET): "
               "Select window: ")))
   (let* (( help-message "
-Each number/letter represents an emacs window. Windows followed by H or V, are
+Each number represents an emacs window. Windows followed by H or V, are
 internal Horizontal or Vertical splitters. The last window is an external
 window, showing this buffer.
 
