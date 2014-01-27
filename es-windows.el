@@ -40,6 +40,11 @@
   "Face used for regular files in project-explorer sidebar."
   :group 'es-windows)
 
+(defface esw/blue-face
+    `((t (:background "#5580E3")))
+  "Face used for regular files in project-explorer sidebar."
+  :group 'es-windows)
+
 (defcustom esw/be-helpful t
   "Whether to show help messages"
   :group 'es-windows
@@ -88,6 +93,7 @@
                   (buffer-name
                    (window-buffer window)))))
     (with-current-buffer buffer
+      (setq major-mode 'esw/cover-mode)
       ;; (face-remap-add-relative 'default 'esw/label-face)
       (insert label)
       (goto-char (point-min))
@@ -129,13 +135,52 @@
           nil)
         ( t)))
 
+;; (defvar esw/covering-buffers nil)
+(defvar esw/window-id-mappings nil)
+(defvar-local esw/remap-cookie nil)
+
+(cl-defun esw/mark-windows ()
+  (let* (( string
+           (save-excursion
+             ;; (setq tmp (buffer-string))
+             (goto-char (length (minibuffer-prompt)))
+             ;; (search-forward ": " )
+             (buffer-substring (point) (point-max))))
+         ( buffer-id (progn (string-match
+                             "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$"
+                             string)
+                            (match-string 1 string)))
+         ( selected-window
+           (car (rassoc buffer-id esw/window-id-mappings)))
+         ( windows-to-mark
+           (when selected-window
+             (cl-remove-if 'esw/window-children
+                           (esw/internal-window-list
+                            selected-window)))))
+    (cl-loop for window being the windows
+             do (with-selected-window window
+                  (with-current-buffer (window-buffer window)
+                    ;; Should always be t
+                    (when (eq major-mode 'esw/cover-mode)
+                      (if (memq window windows-to-mark)
+                          (unless esw/remap-cookie
+                            (setq esw/remap-cookie
+                                  (face-remap-add-relative 'default 'esw/blue-face)))
+                        (when esw/remap-cookie
+                          (face-remap-remove-relative esw/remap-cookie)
+                          (setq esw/remap-cookie nil)))
+                      ))))
+    ))
+
 (define-minor-mode esw/minibuffer-mode
     "Custom esw keybindings for the minibuffer."
   nil nil
   (let ((map (make-sparse-keymap)))
     (cl-dolist (key '("v" "V" "<" ">" "^"))
       (define-key map key 'self-insert-and-exit))
-    map))
+    map)
+  (progn
+    (add-hook 'post-command-hook 'esw/mark-windows nil t)))
 
 (defun esw/restore-windows (spec)
   (cl-destructuring-bind
@@ -175,10 +220,11 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
          ( internal-windows
            (cl-remove-if (lambda (win) (window-parameter win 'window-side))
                          (esw/internal-window-list)))
-         ( window-id-map (cl-mapcar (lambda (window id)
-                                      (cons window id))
-                                    internal-windows
-                                    (esw/shortcuts)))
+         ( esw/window-id-mappings
+           (cl-mapcar (lambda (window id)
+                        (cons window id))
+                      internal-windows
+                      (esw/shortcuts)))
          ( cover-window
            (lambda (window)
              (esw/cover-window
@@ -187,12 +233,14 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                   (assoc window window-id-map)
                 (concat (mapconcat (lambda (window)
                                      (concat
-                                      (propertize (cdr (assoc window window-id-map))
+                                      (propertize (cdr (assoc window
+                                                              esw/window-id-mappings))
                                                   'face 'esw/label-face)
                                       (esw/window-type window)))
                                    (esw/window-lineage window)
                                    " ")
                         (when esw/be-helpful help-message))))))
+
          buffers
          user-input-action
          selected-window)
@@ -209,7 +257,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              (string-match "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$" user-input))
            (setq selected-window (if (match-string 1 user-input)
                                      (or (car (rassoc (match-string 1 user-input)
-                                                      window-id-map))
+                                                      esw/window-id-mappings))
                                          (user-error "Not a valid window"))
                                    (cl-find-if 'esw/window-splittable-p
                                                internal-windows)))
