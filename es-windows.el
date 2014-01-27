@@ -50,6 +50,11 @@
   :group 'es-windows
   :type 'boolean)
 
+(defcustom esw/colorize-selection nil
+  "Whether to show help messages"
+  :group 'es-windows
+  :type 'boolean)
+
 (defun esw/window-children (window)
   (let* (( first-child (or (window-left-child window)
                            (window-top-child window)))
