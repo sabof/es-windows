@@ -145,7 +145,7 @@
   (setq prompt
         (or prompt
             (if esw/be-helpful
-                "Select a window (type a large letter followed by ^, >, v, < or RET): "
+                "Select a window (type a large number followed by ^, >, v, < or RET): "
               "Select window: ")))
   (let* (( help-message "
 Each number/letter represents an emacs window. Windows followed by H or V, are
