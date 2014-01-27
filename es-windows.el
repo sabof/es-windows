@@ -203,10 +203,12 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
            (setq buffers (mapcar cover-window windows))
            (setq user-input (read-string prompt))
            (string-match "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$" user-input)
-           (setq selected-window (or (car (rassoc (match-string 1 user-input)
-                                                  window-id-map))
-                                     (cl-find-if 'esw/window-splittable-p
-                                                 internal-windows)))
+           (setq selected-window (if (match-string 1 user-input)
+                                     (or (car (rassoc (match-string 1 user-input)
+                                                      window-id-map))
+                                         (user-error "Not a valid window"))
+                                   (cl-find-if 'esw/window-splittable-p
+                                               internal-windows)))
            (unless selected-window
              (user-error "No window selected"))
            (setq user-input-action (match-string 2 user-input)))
