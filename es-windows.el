@@ -118,6 +118,15 @@
                             windows)
           )))
 
+(defun esw/window-splittable-p (window)
+  (cond ( (window-parameter window 'window-side)
+          nil)
+        ( (cl-some (lambda (window)
+                     (window-parameter window 'window-side))
+                   (esw/window-children window))
+          nil)
+        ( t)))
+
 (define-minor-mode esw/minibuffer-mode
     "Custom esw keybindings for the minibuffer."
   nil nil
@@ -156,6 +165,8 @@ Type the number of the window you want, followed by RET, and that window will be
 used. You can also type ^, >, v, or < instead of RET, in which case the window
 will be split in that direction.
 
+If no window is provided, use the closest to root window that can be split.
+
 To prevent this message from showing, set `esw/be-helpful' to `nil'")
          ( spec (esw/save-windows))
          ( windows (esw/window-list))
@@ -189,9 +200,11 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                user-input)
            (setq buffers (mapcar cover-window windows))
            (setq user-input (read-string prompt))
-           (string-match "^\\([^Vv<>^]+\\)\\([Vv<>^]\\)?$" user-input)
-           (setq selected-window (car (rassoc (match-string 1 user-input)
-                                              window-id-map)))
+           (string-match "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$" user-input)
+           (setq selected-window (or (car (rassoc (match-string 1 user-input)
+                                                  window-id-map))
+                                     (cl-find-if 'esw/window-splittable-p
+                                                 internal-windows)))
            (unless selected-window
              (user-error "No window selected"))
            (setq user-input-action (match-string 2 user-input)))
@@ -225,8 +238,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     selected-window))
 
 (defun esw/show-buffer (buffer)
-  (set-window-buffer (esw/select-window)
-                     buffer))
+  (set-window-buffer (esw/select-window) buffer))
 
 (provide 'es-windows)
 ;;; es-windows.el ends here
