@@ -151,11 +151,11 @@
         (with-current-buffer (window-buffer win)
           (goto-char (point-max)))))))
 
-(cl-defun esw/select-window (&optional prompt)
+(cl-defun esw/select-window (&optional prompt no-splits)
   (interactive)
   (setq prompt
         (or prompt
-            (if esw/be-helpful
+            (if (and (not no-splits) esw/be-helpful)
                 "Select a window (type a large number followed by ^, >, v, < or RET): "
               "Select window: ")))
   (let* (( help-message "
@@ -183,14 +183,16 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
            (lambda (window)
              (esw/cover-window
               window
-              (concat (mapconcat (lambda (window)
-                                   (concat
-                                    (propertize (cdr (assoc window window-id-map))
-                                                'face 'esw/label-face)
-                                    (esw/window-type window)))
-                                 (esw/window-lineage window)
-                                 " ")
-                      (when esw/be-helpful help-message)))))
+              (if no-splits
+                  (assoc window window-id-map)
+                (concat (mapconcat (lambda (window)
+                                     (concat
+                                      (propertize (cdr (assoc window window-id-map))
+                                                  'face 'esw/label-face)
+                                      (esw/window-type window)))
+                                   (esw/window-lineage window)
+                                   " ")
+                        (when esw/be-helpful help-message))))))
          buffers
          user-input-action
          selected-window)
@@ -201,8 +203,10 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                        minibuffer-setup-hook))
                user-input)
            (setq buffers (mapcar cover-window windows))
-           (setq user-input (read-string prompt))
-           (string-match "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$" user-input)
+           (if no-splits
+               (progn)
+             (setq user-input (read-string prompt))
+             (string-match "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$" user-input))
            (setq selected-window (if (match-string 1 user-input)
                                      (or (car (rassoc (match-string 1 user-input)
                                                       window-id-map))
