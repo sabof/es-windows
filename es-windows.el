@@ -159,9 +159,12 @@ will be split in that direction.
 To prevent this message from showing, set `esw/be-helpful' to `nil'")
          ( spec (esw/save-windows))
          ( windows (esw/window-list))
+         ( internal-windows
+           (cl-remove-if (lambda (win) (window-parameter win 'window-side))
+                         (esw/internal-window-list)))
          ( window-id-map (cl-mapcar (lambda (window id)
                                       (cons window id))
-                                    (esw/internal-window-list)
+                                    internal-windows
                                     (esw/shortcuts)))
          ( cover-window
            (lambda (window)
