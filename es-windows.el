@@ -238,7 +238,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     selected-window))
 
 (defun esw/show-buffer (buffer)
-  (interactive (list (read-buffer "Choose buffer: ")))
+  (interactive (list (get-buffer-create (read-buffer "Choose buffer: "))))
   (set-window-buffer (esw/select-window) buffer))
 
 (defun esw/move-window (window)
