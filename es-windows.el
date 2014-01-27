@@ -113,7 +113,8 @@
                   windows)
           (cl-remove-if-not (lambda (window)
                               (with-selected-window window
-                                (eobp)))
+                                (with-current-buffer (window-buffer window)
+                                  (eobp))))
                             windows)
           )))
 
@@ -189,7 +190,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
            (setq selected-window (car (rassoc (match-string 1 user-input)
                                               window-id-map)))
            (unless selected-window
-             (error "No window selected"))
+             (user-error "No window selected"))
            (setq user-input-action (match-string 2 user-input)))
       (mapc 'kill-buffer buffers)
       (esw/restore-windows spec))
