@@ -240,5 +240,17 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 (defun esw/show-buffer (buffer)
   (set-window-buffer (esw/select-window) buffer))
 
+(defun esw/move-window (window)
+  "Show current buffer in a different window, and delete the old window."
+  (interactive (list (selected-window)))
+  (let* (( ori-window window)
+         ( buffer (window-buffer ori-window))
+         ( new-window (esw/select-window)))
+    (cl-assert (window-deletable-p ori-window))
+    (cl-assert new-window)
+    (cl-assert (not (eq new-window ori-window)))
+    (set-window-buffer new-window buffer)
+    (delete-window ori-window)))
+
 (provide 'es-windows)
 ;;; es-windows.el ends here
