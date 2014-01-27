@@ -84,7 +84,9 @@
     result))
 
 (defun esw/cover-window (window label)
-  (let ((buffer (generate-new-buffer "esw")))
+  (let (( buffer (generate-new-buffer
+                  (buffer-name
+                   (window-buffer window)))))
     (with-current-buffer buffer
       ;; (face-remap-add-relative 'default 'esw/label-face)
       (insert label)
