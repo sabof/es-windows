@@ -72,6 +72,7 @@
   (let ((keys (if (char-equal (aref (caar esw/key-direction-mappings) 0) ?^ )
                   (mapconcat 'car (reverse esw/key-direction-mappings) "")
                 (mapconcat 'car esw/key-direction-mappings ""))))
+    ;; FIXME: What about "[" and "]"? Should I abandon regex altogether?
     (format "^ *\\([^%s]+\\)?\\([%s]\\)? *$"
             keys keys)))
 
@@ -179,9 +180,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 (cl-defun esw/mark-windows ()
   (let* (( input-string
            (save-excursion
-             ;; (setq tmp (buffer-string))
              (goto-char (length (minibuffer-prompt)))
-             ;; (search-forward ": " )
              (buffer-substring (point) (point-max))))
          ( buffer-id (progn (string-match (esw/user-input-regex)
                                           input-string)
@@ -257,8 +256,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
          ( segment-label
            (lambda (window)
              (concat
-              (propertize (cdr (assoc window
-                                      esw/window-id-mappings))
+              (propertize (cdr (assoc window esw/window-id-mappings))
                           'face 'esw/label-face)
               (esw/window-type window))))
          ( cover-window
@@ -272,7 +270,9 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                    " ")
                         (when esw/be-helpful
                           (format esw/help-message
-                                  (mapconcat 'car esw/key-direction-mappings ", "))))))))
+                                  (mapconcat 'car
+                                             esw/key-direction-mappings
+                                             ", "))))))))
          buffers
          user-input-split
          selected-window)
