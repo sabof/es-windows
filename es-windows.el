@@ -33,6 +33,7 @@
 
 (require 'quail)
 (require 'cl-lib)
+(require 'face-remap)
 
 (defface esw/label-face
     `((t (:inherit font-lock-function-name-face
@@ -54,6 +55,9 @@
   "Whether to dynamically colorize the selected window."
   :group 'es-windows
   :type 'boolean)
+
+(defvar esw/user-input-regex
+  "^ *\\([^Vv<>^]+\\)?\\([Vv<>^]\\)? *$")
 
 (defun esw/window-children (window)
   (let* (( first-child (or (window-left-child window)
@@ -92,8 +96,8 @@
             (cl-callf append new-fringe children))))
       (setq fringe new-fringe
             new-fringe nil))
-    (remove-if-not 'esw/window-splittable-p
-                   result)
+    (cl-remove-if-not 'esw/window-splittable-p
+                      result)
     ))
 
 (defun esw/cover-window (window label)
@@ -102,10 +106,10 @@
                    (window-buffer window)))))
     (with-current-buffer buffer
       (setq major-mode 'esw/cover-mode)
-      ;; (face-remap-add-relative 'default 'esw/label-face)
       (insert label)
       (goto-char (point-min))
       (setq cursor-type nil)
+      (setq buffer-read-only t)
       (when (window-dedicated-p window)
         (set-window-dedicated-p window nil))
       (set-window-buffer window buffer)
@@ -153,9 +157,7 @@
              (goto-char (length (minibuffer-prompt)))
              ;; (search-forward ": " )
              (buffer-substring (point) (point-max))))
-         ( buffer-id (progn (string-match
-                             "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$"
-                             string)
+         ( buffer-id (progn (string-match esw/user-input-regex string)
                             (match-string 1 string)))
          ( selected-window
            (car (rassoc buffer-id esw/window-id-mappings)))
@@ -175,8 +177,7 @@
                            'default 'esw/selection-face)
                         (face-remap-remove-relative
                          '(default . esw/selection-face))
-                        )
-                      ))))
+                        )))))
     ))
 
 (define-minor-mode esw/minibuffer-mode
@@ -246,7 +247,6 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                    (esw/window-lineage window)
                                    " ")
                         (when esw/be-helpful help-message))))))
-
          buffers
          user-input-action
          selected-window)
@@ -260,7 +260,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
            (if no-splits
                (progn)
              (setq user-input (read-string prompt))
-             (string-match "^\\([^Vv<>^]+\\)?\\([Vv<>^]\\)?$" user-input))
+             (string-match esw/user-input-regex user-input))
            (setq selected-window (if (match-string 1 user-input)
                                      (or (car (rassoc (match-string 1 user-input)
                                                       esw/window-id-mappings))
