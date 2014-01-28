@@ -40,18 +40,18 @@
   "Face used for regular files in project-explorer sidebar."
   :group 'es-windows)
 
-(defface esw/blue-face
-    `((t (:background "#5580E3")))
+(defface esw/selection-face
+    `((t (:inherit region)))
   "Face used for regular files in project-explorer sidebar."
   :group 'es-windows)
 
 (defcustom esw/be-helpful t
-  "Whether to show help messages"
+  "Whether to show help messages."
   :group 'es-windows
   :type 'boolean)
 
-(defcustom esw/colorize-selection nil
-  "Whether to show help messages"
+(defcustom esw/colorize-selection t
+  "Whether to dynamically colorize the selected window."
   :group 'es-windows
   :type 'boolean)
 
@@ -70,7 +70,8 @@
   (nreverse
    (cl-loop for the-window = window then (window-parent the-window)
             while the-window
-            collecting the-window)))
+            when (esw/window-splittable-p the-window)
+            collect the-window)))
 
 (defun esw/shortcuts ()
   (cl-remove-if (lambda (it) (member it '("V" "v")))
@@ -91,7 +92,9 @@
             (cl-callf append new-fringe children))))
       (setq fringe new-fringe
             new-fringe nil))
-    result))
+    (remove-if-not 'esw/window-splittable-p
+                   result)
+    ))
 
 (defun esw/cover-window (window label)
   (let (( buffer (generate-new-buffer
@@ -115,8 +118,8 @@
           "V")))
 
 (defun esw/window-list ()
-  (cl-remove-if (lambda (win) (window-parameter win 'window-side))
-                (window-list nil nil (frame-first-window))))
+  (cl-remove-if-not 'esw/window-splittable-p
+                    (window-list nil nil (frame-first-window))))
 
 (defun esw/save-windows ()
   (let ((windows (esw/window-list)))
@@ -142,7 +145,6 @@
 
 ;; (defvar esw/covering-buffers nil)
 (defvar esw/window-id-mappings nil)
-(defvar-local esw/remap-cookie nil)
 
 (cl-defun esw/mark-windows ()
   (let* (( string
@@ -166,14 +168,14 @@
              do (with-selected-window window
                   (with-current-buffer (window-buffer window)
                     ;; Should always be t
-                    (when (eq major-mode 'esw/cover-mode)
+                    (when (and esw/colorize-selection
+                               (eq major-mode 'esw/cover-mode))
                       (if (memq window windows-to-mark)
-                          (unless esw/remap-cookie
-                            (setq esw/remap-cookie
-                                  (face-remap-add-relative 'default 'esw/blue-face)))
-                        (when esw/remap-cookie
-                          (face-remap-remove-relative esw/remap-cookie)
-                          (setq esw/remap-cookie nil)))
+                          (face-remap-add-relative
+                           'default 'esw/selection-face)
+                        (face-remap-remove-relative
+                         '(default . esw/selection-face))
+                        )
                       ))))
     ))
 
@@ -223,8 +225,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
          ( spec (esw/save-windows))
          ( windows (esw/window-list))
          ( internal-windows
-           (cl-remove-if (lambda (win) (window-parameter win 'window-side))
-                         (esw/internal-window-list)))
+           (esw/internal-window-list))
          ( esw/window-id-mappings
            (cl-mapcar (lambda (window id)
                         (cons window id))
