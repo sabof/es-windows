@@ -223,30 +223,30 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 
 (cl-defun esw/select-window (&optional prompt no-splits)
   (interactive)
-  (setq no-splits nil) ; Not implemented
-  (setq prompt
-        (or prompt
-            (if (and (not no-splits) esw/be-helpful)
-                "Select a window (type a large number followed by ^, >, v, < or RET): "
-              "Select window: ")))
+  (unless prompt
+    (setq prompt
+          (if (and (not no-splits) esw/be-helpful)
+              "Select a window (type a large number followed by ^, >, v, < or RET): "
+            "Select window: ")))
   (let* (( spec (esw/save-windows))
          ( windows (esw/window-list))
-         ( internal-windows
-           (esw/internal-window-list))
+         ( internal-windows (esw/internal-window-list))
          ( esw/window-id-mappings
            (cl-mapcar 'cons internal-windows (esw/shortcuts)))
+         ( segment-label
+           (lambda (window)
+             (concat
+              (propertize (cdr (assoc window
+                                      esw/window-id-mappings))
+                          'face 'esw/label-face)
+              (esw/window-type window))))
          ( cover-window
            (lambda (window)
              (esw/cover-window
               window
               (if no-splits
                   (assoc window window-id-map)
-                (concat (mapconcat (lambda (window)
-                                     (concat
-                                      (propertize (cdr (assoc window
-                                                              esw/window-id-mappings))
-                                                  'face 'esw/label-face)
-                                      (esw/window-type window)))
+                (concat (mapconcat segment-label
                                    (esw/window-lineage window)
                                    " ")
                         (when esw/be-helpful esw/help-message))))))
@@ -261,11 +261,11 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 
     (unwind-protect
          (let (( minibuffer-setup-hook
-                 (cons 'esw/minibuffer-mode
-                       minibuffer-setup-hook))
+                 (cons 'esw/minibuffer-mode minibuffer-setup-hook))
                user-input)
            (setq buffers (mapcar cover-window windows))
            (if no-splits
+               ;; FIXME: Implement me
                (progn)
              (setq user-input (read-string prompt))
              (string-match esw/user-input-regex user-input))
@@ -284,10 +284,12 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 
     (if user-input-action
         (setq selected-window
-              (split-window
-               selected-window
-               nil (cdr (assoc user-input-action
-                               action-direction-mappings))))
+              (split-window selected-window
+                            nil
+                            (cdr
+                             (assoc
+                              user-input-action
+                              action-direction-mappings))))
       (while (esw/window-children selected-window)
         (unless selected-window
           (error "Shouldn't happen"))
