@@ -31,9 +31,12 @@
 
 ;;; Code:
 
-(require 'quail)
 (require 'cl-lib)
 (require 'face-remap)
+
+(defgroup es-windows nil
+  "A project explorer sidebar."
+  :group 'convenience)
 
 (defface esw/label-face
     `((t (:inherit font-lock-function-name-face
@@ -56,8 +59,21 @@
   :group 'es-windows
   :type 'boolean)
 
-(defvar esw/user-input-regex
-  "^ *\\([^Vv<>^]+\\)?\\([Vv<>^]\\)? *$")
+(defcustom esw/key-direction-mappings
+  '((">" . right)
+    ("<" . left)
+    ("^" . above)
+    ("v" . below))
+  "Keys that will trigger splitting."
+  :group 'es-windows
+  :type 'sexp)
+
+(defun esw/user-input-regex ()
+  (let ((keys (if (char-equal (aref keys 0) ?^ )
+                  (mapconcat 'car (reverse esw/key-direction-mappings) "")
+                (mapconcat 'car esw/key-direction-mappings ""))))
+    (format "^ *\\([^%s]+\\)?\\([%s]\\)? *$"
+            keys keys)))
 
 (defvar esw/window-id-mappings nil)
 
@@ -84,6 +100,24 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
               children))
       (nreverse children))))
 
+(defun esw/shortcuts ()
+  (let (( keys '("1" "2" "3" "4" "5" "6" "7" "8" "9" "0"
+                 "q" "w" "e" "r" "t" "y" "u" "i" "o" "p"
+                 "a" "s" "d" "f" "g" "h" "j" "k" "l" ";"
+                 "z" "x" "c" "b" "n" "m" "," "." "/"))
+        ( action-keys (mapcar 'car esw/key-direction-mappings)))
+    (cl-remove-if (lambda (it) (member it action-keys))
+                  keys)))
+
+(defun esw/window-splittable-p (window)
+  (cond ( (window-parameter window 'window-side)
+          nil)
+        ( (cl-some (lambda (window)
+                     (window-parameter window 'window-side))
+                   (esw/window-children window))
+          nil)
+        ( t)))
+
 (cl-defun esw/window-lineage (&optional (window (selected-window)))
   "Result includes WINDOW"
   (nreverse
@@ -91,13 +125,6 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
             while the-window
             when (esw/window-splittable-p the-window)
             collect the-window)))
-
-(defun esw/shortcuts ()
-  (cl-remove-if (lambda (it) (member it '("V" "v")))
-                (cl-loop with layout = (split-string quail-keyboard-layout "")
-                         for row from 1 to 4
-                         nconc (cl-loop for col from 1 to 10
-                                        collect (nth (+ 1 (* 2 col) (* 30 row)) layout)))))
 
 (cl-defun esw/internal-window-list (&optional (window (frame-root-window)))
   (let (( result (list window))
@@ -114,6 +141,10 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     (cl-remove-if-not 'esw/window-splittable-p
                       result)
     ))
+
+(defun esw/window-list ()
+  (cl-remove-if-not 'esw/window-splittable-p
+                    (window-list nil nil (frame-first-window))))
 
 (defun esw/cover-window (window label)
   (let (( buffer (generate-new-buffer
@@ -136,10 +167,6 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
         ( (window-top-child window)
           "V")))
 
-(defun esw/window-list ()
-  (cl-remove-if-not 'esw/window-splittable-p
-                    (window-list nil nil (frame-first-window))))
-
 (defun esw/save-windows ()
   (let ((windows (esw/window-list)))
     (list (current-window-configuration)
@@ -149,24 +176,16 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
           (cl-remove-if-not 'esw/window-eobp windows)
           )))
 
-(defun esw/window-splittable-p (window)
-  (cond ( (window-parameter window 'window-side)
-          nil)
-        ( (cl-some (lambda (window)
-                     (window-parameter window 'window-side))
-                   (esw/window-children window))
-          nil)
-        ( t)))
-
 (cl-defun esw/mark-windows ()
-  (let* (( string
+  (let* (( input-string
            (save-excursion
              ;; (setq tmp (buffer-string))
              (goto-char (length (minibuffer-prompt)))
              ;; (search-forward ": " )
              (buffer-substring (point) (point-max))))
-         ( buffer-id (progn (string-match esw/user-input-regex string)
-                            (match-string 1 string)))
+         ( buffer-id (progn (string-match (esw/user-input-regex)
+                                          input-string)
+                            (match-string 1 input-string)))
          ( selected-window
            (car (rassoc buffer-id esw/window-id-mappings)))
          ( windows-to-mark
@@ -174,28 +193,26 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              (cl-remove-if 'esw/window-children
                            (esw/internal-window-list
                             selected-window)))))
-    (cl-loop for window being the windows
-             do (with-selected-window window
-                  (with-current-buffer (window-buffer window)
-                    (when (and esw/colorize-selection
-                               ;; Should always be t
-                               (eq major-mode 'esw/cover-mode))
-                      (if (memq window windows-to-mark)
-                          (face-remap-add-relative
-                           'default 'esw/selection-face)
-                        (face-remap-remove-relative
-                         '(default . esw/selection-face))
-                        )))))
-    ))
+    (cl-dolist (window (window-list))
+      (with-current-buffer (window-buffer window)
+        (when (eq major-mode 'esw/cover-mode)
+          (if (memq window windows-to-mark)
+              (face-remap-add-relative
+               'default 'esw/selection-face)
+            (face-remap-remove-relative
+             '(default . esw/selection-face))
+            ))))))
 
+(defvar esw/minibuffer-mode-map nil)
 (define-minor-mode esw/minibuffer-mode
     "Custom esw keybindings for the minibuffer."
-  nil nil
-  (let ((map (make-sparse-keymap)))
-    (cl-dolist (key '("v" "V" "<" ">" "^"))
-      (define-key map key 'self-insert-and-exit))
-    map)
-  (progn
+  nil nil nil
+  (setq esw/minibuffer-mode-map
+        (let ((map (make-sparse-keymap)))
+          (cl-dolist (mapping esw/key-direction-mappings)
+            (define-key map (kbd (car mapping)) 'self-insert-and-exit))
+          map))
+  (when esw/colorize-selection
     (add-hook 'post-command-hook 'esw/mark-windows nil t)))
 
 (defun esw/window-goto-eob (window)
@@ -249,12 +266,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                 (concat (mapconcat segment-label
                                    (esw/window-lineage window)
                                    " ")
-                        (when esw/be-helpful esw/help-message))))))
-         ( action-direction-mappings
-           '((">" . right)
-             ("<" . left)
-             ("^" . above)
-             ("v" . below)))
+                        (when esw/be-helpful
+                          esw/help-message))))))
          buffers
          user-input-action
          selected-window)
@@ -268,12 +281,13 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                ;; FIXME: Implement me
                (progn)
              (setq user-input (read-string prompt))
-             (string-match esw/user-input-regex user-input))
-           (setq selected-window (if (match-string 1 user-input)
-                                     (or (car (rassoc (match-string 1 user-input)
-                                                      esw/window-id-mappings))
-                                         (user-error "Not a valid window"))
-                                   (car internal-windows)))
+             (string-match (esw/user-input-regex) user-input))
+           (setq selected-window
+                 (if (match-string 1 user-input)
+                     (or (car (rassoc (match-string 1 user-input)
+                                      esw/window-id-mappings))
+                         (user-error "Not a valid window"))
+                   (car internal-windows)))
            (unless selected-window
              (user-error "No window selected"))
            (setq user-input-action (downcase (match-string 2 user-input))))
@@ -286,10 +300,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
         (setq selected-window
               (split-window selected-window
                             nil
-                            (cdr
-                             (assoc
-                              user-input-action
-                              action-direction-mappings))))
+                            (cdr (assoc user-input-action
+                                        esw/key-direction-mappings))))
       (while (esw/window-children selected-window)
         (unless selected-window
           (error "Shouldn't happen"))
