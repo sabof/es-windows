@@ -206,6 +206,7 @@
 
 (cl-defun esw/select-window (&optional prompt no-splits)
   (interactive)
+  (setq no-splits nil) ; Not implemented
   (setq prompt
         (or prompt
             (if (and (not no-splits) esw/be-helpful)
