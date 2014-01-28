@@ -1,6 +1,8 @@
 # es-windows
 At the moment provides the functions `esw/select-window`, `esw/move-window` and `esw/show-buffer`, which allow the selection and splitting of any window (including internal windows) in two keypresses. Based on `switch-window` by Dimitri Fontaine.
 
+### Example (with 4^ input)
+
 ![screenshot1](https://github.com/sabof/es-windows/raw/master/screenshot1.png)
 ![screenshot2](https://github.com/sabof/es-windows/raw/master/screenshot2.png)
 

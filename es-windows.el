@@ -59,6 +59,8 @@
 (defvar esw/user-input-regex
   "^ *\\([^Vv<>^]+\\)?\\([Vv<>^]\\)? *$")
 
+(defvar esw/window-id-mappings nil)
+
 (defun esw/window-children (window)
   (let* (( first-child (or (window-left-child window)
                            (window-top-child window)))
@@ -147,9 +149,6 @@
           nil)
         ( t)))
 
-;; (defvar esw/covering-buffers nil)
-(defvar esw/window-id-mappings nil)
-
 (cl-defun esw/mark-windows ()
   (let* (( string
            (save-excursion
@@ -169,8 +168,8 @@
     (cl-loop for window being the windows
              do (with-selected-window window
                   (with-current-buffer (window-buffer window)
-                    ;; Should always be t
                     (when (and esw/colorize-selection
+                               ;; Should always be t
                                (eq major-mode 'esw/cover-mode))
                       (if (memq window windows-to-mark)
                           (face-remap-add-relative
