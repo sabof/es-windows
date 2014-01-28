@@ -61,6 +61,19 @@
 
 (defvar esw/window-id-mappings nil)
 
+(defvar esw/help-message "
+Each number represents an emacs window. Windows followed by H or V, are
+internal Horizontal or Vertical splitters. The last window is an external
+window, showing this buffer.
+
+Type the number of the window you want, followed by RET, and that window will be
+used. You can also type ^, >, v, or < instead of RET, in which case the window
+will be split in that direction.
+
+If no window is provided, use the closest to root window that can be split.
+
+To prevent this message from showing, set `esw/be-helpful' to `nil'")
+
 (defun esw/window-children (window)
   (let* (( first-child (or (window-left-child window)
                            (window-top-child window)))
@@ -133,11 +146,7 @@
           (cl-remove-if-not 'window-dedicated-p windows)
           (mapcar (lambda (window) (cons window (window-point window)))
                   windows)
-          (cl-remove-if-not (lambda (window)
-                              (with-selected-window window
-                                (with-current-buffer (window-buffer window)
-                                  (eobp))))
-                            windows)
+          (cl-remove-if-not 'esw/window-eobp windows)
           )))
 
 (defun esw/window-splittable-p (window)
@@ -189,6 +198,18 @@
   (progn
     (add-hook 'post-command-hook 'esw/mark-windows nil t)))
 
+(defun esw/window-goto-eob (window)
+  (when (window-live-p window)
+    (with-selected-window window
+      (with-current-buffer (window-buffer window)
+        (goto-char (point-max))))))
+
+(defun esw/window-eobp (window)
+  (when (window-live-p window)
+    (with-selected-window window
+      (with-current-buffer (window-buffer window)
+        (eobp)))))
+
 (defun esw/restore-windows (spec)
   (cl-destructuring-bind
       (config dedicated-windows window-points eobp-window-list)
@@ -198,10 +219,7 @@
       (set-window-point (car w) (cdr w)))
     (cl-dolist (w dedicated-windows)
       (set-window-dedicated-p w t))
-    (cl-dolist (win eobp-window-list)
-      (with-selected-window win
-        (with-current-buffer (window-buffer win)
-          (goto-char (point-max)))))))
+    (mapc 'esw/window-goto-eob eobp-window-list)))
 
 (cl-defun esw/select-window (&optional prompt no-splits)
   (interactive)
@@ -211,27 +229,12 @@
             (if (and (not no-splits) esw/be-helpful)
                 "Select a window (type a large number followed by ^, >, v, < or RET): "
               "Select window: ")))
-  (let* (( help-message "
-Each number represents an emacs window. Windows followed by H or V, are
-internal Horizontal or Vertical splitters. The last window is an external
-window, showing this buffer.
-
-Type the number of the window you want, followed by RET, and that window will be
-used. You can also type ^, >, v, or < instead of RET, in which case the window
-will be split in that direction.
-
-If no window is provided, use the closest to root window that can be split.
-
-To prevent this message from showing, set `esw/be-helpful' to `nil'")
-         ( spec (esw/save-windows))
+  (let* (( spec (esw/save-windows))
          ( windows (esw/window-list))
          ( internal-windows
            (esw/internal-window-list))
          ( esw/window-id-mappings
-           (cl-mapcar (lambda (window id)
-                        (cons window id))
-                      internal-windows
-                      (esw/shortcuts)))
+           (cl-mapcar 'cons internal-windows (esw/shortcuts)))
          ( cover-window
            (lambda (window)
              (esw/cover-window
@@ -246,7 +249,12 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                       (esw/window-type window)))
                                    (esw/window-lineage window)
                                    " ")
-                        (when esw/be-helpful help-message))))))
+                        (when esw/be-helpful esw/help-message))))))
+         ( action-direction-mappings
+           '((">" . right)
+             ("<" . left)
+             ("^" . above)
+             ("v" . below)))
          buffers
          user-input-action
          selected-window)
@@ -265,38 +273,30 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                      (or (car (rassoc (match-string 1 user-input)
                                                       esw/window-id-mappings))
                                          (user-error "Not a valid window"))
-                                   (cl-find-if 'esw/window-splittable-p
-                                               internal-windows)))
+                                   (car internal-windows)))
            (unless selected-window
              (user-error "No window selected"))
-           (setq user-input-action (match-string 2 user-input)))
-      (mapc 'kill-buffer buffers)
+           (setq user-input-action (downcase (match-string 2 user-input))))
+      (cl-dolist (buffer buffers)
+        (ignore-errors
+          (kill-buffer buffer)))
       (esw/restore-windows spec))
 
     (if user-input-action
-        (progn (cl-callf downcase user-input-action)
-               (setq selected-window
-                     (split-window
-                      selected-window
-                      nil (cdr (assoc user-input-action
-                                      '((">" . right)
-                                        ("<" . left)
-                                        ("^" . above)
-                                        ("v" . below)
-                                        ))))))
-      (while (not (window-live-p selected-window))
+        (setq selected-window
+              (split-window
+               selected-window
+               nil (cdr (assoc user-input-action
+                               action-direction-mappings))))
+      (while (esw/window-children selected-window)
         (unless selected-window
-          (error "Not a window"))
+          (error "Shouldn't happen"))
         (let ((children (esw/window-children selected-window)))
           (mapc 'delete-window (cl-rest children))
           (setq selected-window (car children)))
         (set-window-dedicated-p selected-window nil)))
     (select-window selected-window)
-    (cl-dolist (win (nth 3 spec))
-      (when (window-live-p win)
-        (with-selected-window win
-          (with-current-buffer (window-buffer win)
-            (goto-char (point-max))))))
+    (mapc 'esw/window-goto-eob (nth 3 spec))
     selected-window))
 
 (defun esw/show-buffer (buffer)
