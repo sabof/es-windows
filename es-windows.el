@@ -69,7 +69,7 @@
   :type 'sexp)
 
 (defun esw/user-input-regex ()
-  (let ((keys (if (char-equal (aref keys 0) ?^ )
+  (let ((keys (if (char-equal (aref (caar esw/key-direction-mappings) 0) ?^ )
                   (mapconcat 'car (reverse esw/key-direction-mappings) "")
                 (mapconcat 'car esw/key-direction-mappings ""))))
     (format "^ *\\([^%s]+\\)?\\([%s]\\)? *$"
@@ -83,7 +83,7 @@ internal Horizontal or Vertical splitters. The last window is an external
 window, showing this buffer.
 
 Type the number of the window you want, followed by RET, and that window will be
-used. You can also type ^, >, v, or < instead of RET, in which case the window
+used. You can also type %s instead of RET, in which case the window
 will be split in that direction.
 
 If no window is provided, use the closest to root window that can be split.
@@ -232,10 +232,10 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
       (config dedicated-windows window-points eobp-window-list)
       spec
     (set-window-configuration config)
-    (cl-dolist (w window-points)
-      (set-window-point (car w) (cdr w)))
-    (cl-dolist (w dedicated-windows)
-      (set-window-dedicated-p w t))
+    (cl-dolist (window window-points)
+      (set-window-point (car window) (cdr window)))
+    (cl-dolist (window dedicated-windows)
+      (set-window-dedicated-p window t))
     (mapc 'esw/window-goto-eob eobp-window-list)))
 
 (cl-defun esw/select-window (&optional prompt no-splits)
@@ -243,7 +243,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
   (unless prompt
     (setq prompt
           (if (and (not no-splits) esw/be-helpful)
-              "Select a window (type a large number followed by ^, >, v, < or RET): "
+              (format "Select a window (type a large number followed by %s or RET): "
+                      (mapconcat 'car esw/key-direction-mappings ", "))
             "Select window: ")))
   (let* (( spec (esw/save-windows))
          ( windows (esw/window-list))
@@ -262,12 +263,13 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              (esw/cover-window
               window
               (if no-splits
-                  (assoc window window-id-map)
+                  (assoc window esw/window-id-mappings)
                 (concat (mapconcat segment-label
                                    (esw/window-lineage window)
                                    " ")
                         (when esw/be-helpful
-                          esw/help-message))))))
+                          (format esw/help-message
+                                  (mapconcat 'car esw/key-direction-mappings ", "))))))))
          buffers
          user-input-action
          selected-window)
@@ -289,8 +291,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                          (user-error "Not a valid window"))
                    (car internal-windows)))
            (unless selected-window
-             (user-error "No window selected"))
-           (setq user-input-action (downcase (match-string 2 user-input))))
+             (user-error "No window selected. Shouldn't happen"))
+           (setq user-input-action (match-string 2 user-input)))
       (cl-dolist (buffer buffers)
         (ignore-errors
           (kill-buffer buffer)))
