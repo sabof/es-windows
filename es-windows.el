@@ -215,6 +215,9 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
   (when esw/colorize-selection
     (add-hook 'post-command-hook 'esw/mark-windows nil t)))
 
+;; Test:
+;; while true; do date; sleep 0.3; done
+
 (defun esw/window-goto-eob (window)
   (when (window-live-p window)
     (with-selected-window window
@@ -271,7 +274,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                           (format esw/help-message
                                   (mapconcat 'car esw/key-direction-mappings ", "))))))))
          buffers
-         user-input-action
+         user-input-split
          selected-window)
 
     (unwind-protect
@@ -290,29 +293,24 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                       esw/window-id-mappings))
                          (user-error "Not a valid window"))
                    (car internal-windows)))
-           (unless selected-window
-             (user-error "No window selected. Shouldn't happen"))
-           (setq user-input-action (match-string 2 user-input)))
+           (setq user-input-split (match-string 2 user-input)))
       (cl-dolist (buffer buffers)
         (ignore-errors
           (kill-buffer buffer)))
       (esw/restore-windows spec))
 
-    (if user-input-action
+    (if user-input-split
         (setq selected-window
               (split-window selected-window
                             nil
-                            (cdr (assoc user-input-action
+                            (cdr (assoc user-input-split
                                         esw/key-direction-mappings))))
       (while (esw/window-children selected-window)
-        (unless selected-window
-          (error "Shouldn't happen"))
         (let ((children (esw/window-children selected-window)))
           (mapc 'delete-window (cl-rest children))
           (setq selected-window (car children)))
         (set-window-dedicated-p selected-window nil)))
     (select-window selected-window)
-    (mapc 'esw/window-goto-eob (nth 3 spec))
     selected-window))
 
 (defun esw/show-buffer (buffer)
