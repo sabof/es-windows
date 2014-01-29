@@ -1,0 +1,7 @@
+(ert-deftest esw/parse-user-input ()
+  (should (equal (esw/parse-user-input "12j")
+                 (cons "12" "j")))
+  (should (equal (esw/parse-user-input " 12j ")
+                 (cons "12" "j")))
+  (should (equal (esw/parse-user-input " 12")
+                 (cons "12" nil))))
