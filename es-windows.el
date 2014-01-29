@@ -68,6 +68,39 @@
   :group 'es-windows
   :type 'sexp)
 
+(defvar esw/window-id-mappings nil
+  "Internal variable, meant to by bound dynamically.")
+
+(defmacro esw/with-protected-layout (&rest body)
+  "An error within the body of this macro will restore the window layout.
+The macro has no effect otherwise."
+  `(let ((spec (esw/save-windows)))
+     (condition-case error
+         (progn ,@body)
+       (error (esw/restore-windows spec)
+              (signal (car error) (cdr error))))))
+(put 'esw/with-protected-layout 'common-lisp-indent-function '(&body))
+
+(defvar esw/with-covered-windows nil)
+(defmacro esw/with-covered-windows (cover-window-func &rest body)
+  "Cover all windows, using COVER-WIDOW-FUNC.
+The windows will be covered only once - the macro has no effect, if it's used
+recursively.
+`esw/window-id-mappings' must be dynamically bound when it's evoked."
+  `(if esw/with-covered-windows
+       (progn ,@body)
+     (let (( esw/with-covered-windows t)
+           ( spec (esw/save-windows))
+           buffers)
+       (unwind-protect
+            (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
+                   ,@body)
+         (cl-dolist (buffer buffers)
+           (ignore-errors
+             (kill-buffer buffer)))
+         (esw/restore-windows spec)))))
+(put 'esw/with-covered-windows 'common-lisp-indent-function 1)
+
 (defun esw/parse-user-input (input-string)
   (setq input-string
         (progn (string-match "^ *\\(.*?\\) *$" input-string)
@@ -87,28 +120,6 @@
           (when (< 0 (length (substring input-string divider)))
             (substring input-string divider)))
     ))
-
-(defvar esw/with-covered-windows nil)
-(defmacro esw/with-covered-windows (cover-window-func &rest body)
-  "Cover all windows, using COVER-WIDOW-FUNC.
-The windows will be covered only once - the macro has no effect, if it's used
-recursively."
-  `(if esw/with-covered-windows
-       (progn ,@body)
-     (let (( esw/with-covered-windows t)
-           ( spec (esw/save-windows))
-           buffers)
-       (unwind-protect
-            (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
-                   ,@body)
-         (cl-dolist (buffer buffers)
-           (ignore-errors
-             (kill-buffer buffer)))
-         (esw/restore-windows spec)))))
-(put 'esw/with-covered-windows 'common-lisp-indent-function 1)
-
-(defvar esw/window-id-mappings nil
-  "Internal variable, meant to by bound dynamically.")
 
 (defvar esw/help-message "
 Each number represents an emacs window. Windows followed by H or V, are
@@ -220,14 +231,37 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
         ( (window-top-child window)
           "V")))
 
+(defun esw/window-state (window)
+  (list (window-buffer window)
+        (window-dedicated-p window)
+        (window-point window)
+        (esw/window-eobp window)))
+
+(defun esw/set-window-state (window state)
+  (cl-destructuring-bind
+      (buffer dedicated point eobp)
+      state
+    (set-window-buffer window buffer)
+    (set-window-dedicated-p window dedicated)
+    (set-window-point window point)
+    (when eobp (esw/window-goto-eob window))))
+
 (defun esw/save-windows ()
   (let ((windows (esw/window-list)))
     (list (current-window-configuration)
-          (cl-remove-if-not 'window-dedicated-p windows)
-          (mapcar (lambda (window) (cons window (window-point window)))
+          (mapcar (lambda (window) (cons window (esw/window-state window)))
                   windows)
-          (cl-remove-if-not 'esw/window-eobp windows)
           )))
+
+(defun esw/restore-windows (spec)
+  (set-window-configuration (cl-first spec))
+  (cl-dolist (state (cl-second spec))
+    (cl-destructuring-bind
+        (window buffer dedicated point eobp)
+        state
+      (set-window-point window point)
+      (when eobp (esw/window-goto-eob window))
+      (set-window-dedicated-p window dedicated))))
 
 (cl-defun esw/mark-windows ()
   (let* (( input-string
@@ -281,19 +315,9 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
       (with-current-buffer (window-buffer window)
         (eobp)))))
 
-(defun esw/restore-windows (spec)
-  (cl-destructuring-bind
-      (config dedicated-windows window-points eobp-window-list)
-      spec
-    (set-window-configuration config)
-    (cl-dolist (window window-points)
-      (set-window-point (car window) (cdr window)))
-    (cl-dolist (window dedicated-windows)
-      (set-window-dedicated-p window t))
-    (mapc 'esw/window-goto-eob eobp-window-list)))
-
-(cl-defun esw/select-window (&optional prompt no-splits)
+(cl-defun esw/select-window (&optional prompt no-splits simple-labels)
   (interactive)
+  ;; FIXME: Implement simple-labels
   (unless prompt
     (setq prompt
           (if (and (not no-splits) esw/be-helpful)
@@ -316,7 +340,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                   (condition-case ignore
                       (char-to-string
                        (event-basic-type
-                        (read-event "Select window: ")))
+                        (read-event (or prompt "Select window: "))))
                     (error (user-error "Not a valid window"))))
           (let (( minibuffer-setup-hook
                   (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
@@ -364,6 +388,22 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
   "Choose and delete a window."
   (interactive)
   (delete-window (esw/select-window nil t)))
+
+(defun esw/swap-two-windows ()
+  "Choose and swap two window."
+  (interactive)
+  (let* (( esw/window-id-mappings
+           (cl-mapcar 'cons (esw/window-list) (esw/shortcuts)))
+         window1 window2 window1-state window2-state)
+    (esw/with-covered-windows
+        (apply-partially 'esw/cover-window nil)
+      (setq window1 (esw/select-window "Select first window: " t))
+      (setq window2 (esw/select-window "Select second window: " t)))
+    (esw/with-protected-layout
+      (setq window1-state (esw/window-state window1))
+      (setq window2-state (esw/window-state window2))
+      (esw/set-window-state window1 window2-state)
+      (esw/set-window-state window2 window1-state))))
 
 (provide 'es-windows)
 ;;; es-windows.el ends here
