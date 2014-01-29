@@ -72,14 +72,16 @@
   "Internal variable, meant to by bound dynamically.")
 
 (defmacro esw/with-protected-layout (&rest body)
-  "An error within the body of this macro will restore the window layout.
-The macro has no effect otherwise."
-  `(let ((spec (esw/save-windows)))
+  "An error within the body of this macro will cause the window layout to be restored.
+Should this happen, the same (or possibly another) will continue unwinding the stack.
+Without errors, the macro has no effect."
+  `(let ((spec (esw/layout-state)))
      (condition-case error
          (progn ,@body)
-       (error (esw/restore-windows spec)
+       (error (esw/set-layout-state spec)
               (signal (car error) (cdr error))))))
 (put 'esw/with-protected-layout 'common-lisp-indent-function '(&body))
+;; FIXME: add elisp indent spec
 
 (defvar esw/with-covered-windows nil)
 (defmacro esw/with-covered-windows (mappings cover-window-func &rest body)
@@ -91,7 +93,7 @@ recursively.
        (progn ,@body)
      (let (( esw/with-covered-windows t)
            ( esw/window-id-mappings ,mappings)
-           ( spec (esw/save-windows))
+           ( spec (esw/layout-state))
            buffers)
        (unwind-protect
             (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
@@ -99,7 +101,7 @@ recursively.
          (cl-dolist (buffer buffers)
            (ignore-errors
              (kill-buffer buffer)))
-         (esw/restore-windows spec)))))
+         (esw/set-layout-state spec)))))
 (put 'esw/with-covered-windows 'common-lisp-indent-function 2)
 
 (defun esw/parse-user-input (input-string)
@@ -233,12 +235,16 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
           "V")))
 
 (defun esw/window-state (window)
+  "Get the state of a window.
+This state can be transfered to the same, or another window,
+with `esw/set-window-state'."
   (list (window-buffer window)
         (window-dedicated-p window)
         (window-point window)
         (esw/window-eobp window)))
 
 (defun esw/set-window-state (window state)
+  "STATE is a window state, created by `esw/window-state'."
   (cl-destructuring-bind
       (buffer dedicated point eobp)
       state
@@ -247,14 +253,16 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     (set-window-point window point)
     (when eobp (esw/window-goto-eob window))))
 
-(defun esw/save-windows ()
+(defun esw/layout-state ()
+  "Save current layout state. It can be restored with `esw/set-layout-state'."
   (let ((windows (esw/window-list)))
     (list (current-window-configuration)
           (mapcar (lambda (window) (cons window (esw/window-state window)))
                   windows)
           )))
 
-(defun esw/restore-windows (spec)
+(defun esw/set-layout-state (spec)
+  "Restore layout according to a SPEC created by `esw/layout-state'."
   (set-window-configuration (cl-first spec))
   (cl-dolist (state (cl-second spec))
     (cl-destructuring-bind
@@ -289,13 +297,12 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              '(default . esw/selection-face))
             ))))))
 
-;; (defvar esw/minibuffer-mode-map nil)
-(define-minor-mode esw/minibuffer-mode
-    "Custom esw keybindings for the minibuffer."
+(define-minor-mode esw/minibuffer-split-mode
+    "Adds splitting keybindings to the minibuffer."
   nil nil (make-sparse-keymap)
-  (setcdr esw/minibuffer-mode-map nil)
+  (setcdr esw/minibuffer-split-mode-map nil)
   (cl-dolist (mapping esw/key-direction-mappings)
-    (define-key esw/minibuffer-mode-map
+    (define-key esw/minibuffer-split-mode-map
         (kbd (car mapping))
       'self-insert-and-exit))
   (when esw/colorize-selection
@@ -337,7 +344,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
       (let (user-input parsed-input)
         (if allow-splitting
             (let (( minibuffer-setup-hook
-                    (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
+                    (cons 'esw/minibuffer-split-mode minibuffer-setup-hook)))
               (setq user-input (read-string prompt)))
           (setq user-input
                 (condition-case nil
