@@ -88,6 +88,19 @@
             (substring input-string divider)))
     ))
 
+(defmacro esw/with-covered-windows (cover-window-func &rest body)
+  `(let (( spec (esw/save-windows))
+         buffers)
+     (unwind-protect
+          (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
+                 ,@body)
+       (cl-dolist (buffer buffers)
+         (ignore-errors
+           (kill-buffer buffer)))
+       (esw/restore-windows spec))))
+(put 'esw/with-covered-windows 'common-lisp-indent-function
+     '(1 &body))
+
 (defvar esw/window-id-mappings nil
   "Internal variable, meant to by bound dynamically.")
 
@@ -123,21 +136,23 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     (cl-remove-if (lambda (it) (member it action-keys))
                   keys)))
 
+(defun esw/window-side-p (window)
+  (window-parameter window 'window-side))
+
+(defun esw/window-side-parent-p (window)
+  (cl-some 'esw/window-side-p
+           (esw/window-children window)))
+
 (defun esw/window-splittable-p (window)
-  (cond ( (window-parameter window 'window-side)
-          nil)
-        ( (cl-some (lambda (window)
-                     (window-parameter window 'window-side))
-                   (esw/window-children window))
-          nil)
-        ( t)))
+  (not (or (esw/window-side-p window)
+           (esw/window-side-parent-p window))))
 
 (cl-defun esw/window-lineage (&optional (window (selected-window)))
   "Result includes WINDOW."
   (nreverse
    (cl-loop for the-window = window then (window-parent the-window)
             while the-window
-            when (esw/window-splittable-p the-window)
+            unless (esw/window-side-parent-p the-window)
             collect the-window)))
 
 (cl-defun esw/internal-window-list (&optional (window (frame-root-window)))
@@ -152,21 +167,42 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
             (cl-callf append new-fringe children))))
       (setq fringe new-fringe
             new-fringe nil))
-    (cl-remove-if-not 'esw/window-splittable-p
-                      result)
+    (cl-remove-if 'esw/window-side-parent-p result)
     ))
 
 (defun esw/window-list ()
-  (cl-remove-if-not 'esw/window-splittable-p
-                    (window-list nil nil (frame-first-window))))
+  (cl-remove-if 'esw/window-side-parent-p
+                (window-list nil nil (frame-first-window))))
 
-(defun esw/cover-window (window label)
+(defun esw/cover-label (label-type window)
+  (let (( segment-label
+          (lambda (window)
+            (concat
+             (propertize (cdr (assoc window esw/window-id-mappings))
+                         'face 'esw/label-face)
+             (esw/window-type window)))))
+    (if (and (eq 'label-type 'full)
+             (not (esw/window-side-p window)))
+        (concat (mapconcat segment-label
+                           (esw/window-lineage window)
+                           " ")
+                (when esw/be-helpful
+                  (format esw/help-message
+                          (mapconcat 'car
+                                     esw/key-direction-mappings
+                                     ", "))))
+      (funcall segment-label window))))
+
+(defun esw/cover-window (label-type window)
   (let (( buffer (generate-new-buffer
                   (buffer-name
                    (window-buffer window)))))
     (with-current-buffer buffer
       (setq major-mode 'esw/cover-mode)
-      (insert label)
+      (insert (esw/cover-label label-type window))
+      (cl-con label-type
+              (simple 1))
+      (insert label-type)
       (goto-char (point-min))
       (setq cursor-type nil)
       (setq buffer-read-only t)
@@ -261,62 +297,35 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
               (format "Select a window (type a large number followed by %s or RET): "
                       (mapconcat 'car esw/key-direction-mappings ", "))
             "Select window: ")))
-  (let* (( spec (esw/save-windows))
-         ( windows (esw/window-list))
-         ( all-windows (if no-splits
+  (let* (( all-windows (if no-splits
                            (esw/window-list)
                          (esw/internal-window-list)))
          ( esw/window-id-mappings
            (cl-mapcar 'cons all-windows (esw/shortcuts)))
-         ( segment-label
-           (lambda (window)
-             (concat
-              (propertize (cdr (assoc window esw/window-id-mappings))
-                          'face 'esw/label-face)
-              (esw/window-type window))))
-         ( cover-window
-           (lambda (window)
-             (esw/cover-window
-              window
-              (if no-splits
-                  (funcall segment-label window)
-                (concat (mapconcat segment-label
-                                   (esw/window-lineage window)
-                                   " ")
-                        (when esw/be-helpful
-                          (format esw/help-message
-                                  (mapconcat 'car
-                                             esw/key-direction-mappings
-                                             ", "))))))))
-         buffers
          user-input-split
          selected-window)
 
-    (unwind-protect
-         (let (user-input parsed-input)
-           (setq buffers (mapcar cover-window windows))
-           (if no-splits
-               (setq user-input
-                     (condition-case error
-                         (char-to-string
-                          (event-basic-type
-                           (read-event "Select window: ")))
-                       (error (user-error "Not a valid window"))))
-             (let (( minibuffer-setup-hook
-                     (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
-               (setq user-input (read-string prompt))))
-           (setq parsed-input (esw/parse-user-input user-input))
-           (setq selected-window
-                 (if (car parsed-input)
-                     (or (car (rassoc (car parsed-input)
-                                      esw/window-id-mappings))
-                         (user-error "Not a valid window"))
-                   (car all-windows)))
-           (setq user-input-split (cdr parsed-input)))
-      (cl-dolist (buffer buffers)
-        (ignore-errors
-          (kill-buffer buffer)))
-      (esw/restore-windows spec))
+    (esw/with-covered-windows (apply-partially 'esw/cover-window
+                                               (if no-splits 'simple 'full))
+      (let (user-input parsed-input)
+        (if no-splits
+            (setq user-input
+                  (condition-case ignore
+                      (char-to-string
+                       (event-basic-type
+                        (read-event "Select window: ")))
+                    (error (user-error "Not a valid window"))))
+          (let (( minibuffer-setup-hook
+                  (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
+            (setq user-input (read-string prompt))))
+        (setq parsed-input (esw/parse-user-input user-input))
+        (setq selected-window
+              (if (car parsed-input)
+                  (or (car (rassoc (car parsed-input)
+                                   esw/window-id-mappings))
+                      (user-error "Not a valid window"))
+                (car all-windows)))
+        (setq user-input-split (cdr parsed-input))))
 
     (if user-input-split
         (setq selected-window
@@ -347,6 +356,11 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     (unless (eq new-window ori-window)
       (set-window-buffer new-window buffer)
       (delete-window ori-window))))
+
+(defun esw/delete-window ()
+  "Choose and delete a window."
+  (interactive)
+  (delete-window (esw/select-window nil t)))
 
 (provide 'es-windows)
 ;;; es-windows.el ends here
