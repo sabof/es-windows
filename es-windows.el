@@ -35,18 +35,18 @@
 (require 'face-remap)
 
 (defgroup es-windows nil
-  "A project explorer sidebar."
+  "Window manipulation utilities."
   :group 'convenience)
 
 (defface esw/label-face
     `((t (:inherit font-lock-function-name-face
                    :height ,(* 2 (face-attribute 'default :height)))))
-  "Face used for regular files in project-explorer sidebar."
+  "Face used for window labels."
   :group 'es-windows)
 
 (defface esw/selection-face
     `((t (:inherit region)))
-  "Face used for regular files in project-explorer sidebar."
+  "Face used for the selected window."
   :group 'es-windows)
 
 (defcustom esw/be-helpful t
@@ -59,6 +59,7 @@
   :group 'es-windows
   :type 'boolean)
 
+;; FIXME: :type keymap?
 (defcustom esw/key-direction-mappings
   '((">" . right)
     ("<" . left)
@@ -69,6 +70,17 @@
   :type 'sexp)
 
 (defun esw/user-input-regex ()
+  (let ((keys (if (char-equal (aref (caar esw/key-direction-mappings) 0) ?^ )
+                  (mapconcat 'car (reverse esw/key-direction-mappings) "")
+                (mapconcat 'car esw/key-direction-mappings ""))))
+    ;; FIXME: What about "[" and "]"? Should I abandon regex altogether?
+    (format "^ *\\([^%s]+\\)?\\([%s]\\)? *$"
+            keys keys)))
+
+(defun esw/parse-user-input (input-string)
+  (setq input-string
+        (progn (match-string "^ *.+")))
+  (let ((st)))
   (let ((keys (if (char-equal (aref (caar esw/key-direction-mappings) 0) ?^ )
                   (mapconcat 'car (reverse esw/key-direction-mappings) "")
                 (mapconcat 'car esw/key-direction-mappings ""))))
@@ -120,7 +132,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
         ( t)))
 
 (cl-defun esw/window-lineage (&optional (window (selected-window)))
-  "Result includes WINDOW"
+  "Result includes WINDOW."
   (nreverse
    (cl-loop for the-window = window then (window-parent the-window)
             while the-window
@@ -202,15 +214,15 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              '(default . esw/selection-face))
             ))))))
 
-(defvar esw/minibuffer-mode-map nil)
+;; (defvar esw/minibuffer-mode-map nil)
 (define-minor-mode esw/minibuffer-mode
     "Custom esw keybindings for the minibuffer."
-  nil nil nil
-  (setq esw/minibuffer-mode-map
-        (let ((map (make-sparse-keymap)))
-          (cl-dolist (mapping esw/key-direction-mappings)
-            (define-key map (kbd (car mapping)) 'self-insert-and-exit))
-          map))
+  nil nil (make-sparse-keymap)
+  (setcdr esw/minibuffer-mode-map nil)
+  (cl-dolist (mapping esw/key-direction-mappings)
+    (define-key esw/minibuffer-mode-map
+        (kbd (car mapping))
+      'self-insert-and-exit))
   (when esw/colorize-selection
     (add-hook 'post-command-hook 'esw/mark-windows nil t)))
 
@@ -242,6 +254,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 
 (cl-defun esw/select-window (&optional prompt no-splits)
   (interactive)
+  (setq no-splits t)
   (unless prompt
     (setq prompt
           (if (and (not no-splits) esw/be-helpful)
@@ -250,9 +263,11 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
             "Select window: ")))
   (let* (( spec (esw/save-windows))
          ( windows (esw/window-list))
-         ( internal-windows (esw/internal-window-list))
+         ( all-windows (if no-splits
+                           (esw/window-list)
+                         (esw/internal-window-list)))
          ( esw/window-id-mappings
-           (cl-mapcar 'cons internal-windows (esw/shortcuts)))
+           (cl-mapcar 'cons all-windows (esw/shortcuts)))
          ( segment-label
            (lambda (window)
              (concat
@@ -264,7 +279,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              (esw/cover-window
               window
               (if no-splits
-                  (assoc window esw/window-id-mappings)
+                  (funcall segment-label window)
                 (concat (mapconcat segment-label
                                    (esw/window-lineage window)
                                    " ")
@@ -278,21 +293,25 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
          selected-window)
 
     (unwind-protect
-         (let (( minibuffer-setup-hook
-                 (cons 'esw/minibuffer-mode minibuffer-setup-hook))
-               user-input)
+         (let (user-input)
            (setq buffers (mapcar cover-window windows))
            (if no-splits
-               ;; FIXME: Implement me
-               (progn)
-             (setq user-input (read-string prompt))
-             (string-match (esw/user-input-regex) user-input))
+               (setq user-input
+                     (condition-case error
+                         (char-to-string
+                          (event-basic-type
+                           (read-event "Select window: ")))
+                       (error (user-error "Not a valid window"))))
+             (let (( minibuffer-setup-hook
+                     (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
+               (setq user-input (read-string prompt))))
+           (string-match (esw/user-input-regex) user-input)
            (setq selected-window
                  (if (match-string 1 user-input)
                      (or (car (rassoc (match-string 1 user-input)
                                       esw/window-id-mappings))
                          (user-error "Not a valid window"))
-                   (car internal-windows)))
+                   (car all-windows)))
            (setq user-input-split (match-string 2 user-input)))
       (cl-dolist (buffer buffers)
         (ignore-errors
