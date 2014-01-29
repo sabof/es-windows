@@ -59,7 +59,6 @@
   :group 'es-windows
   :type 'boolean)
 
-;; FIXME: :type keymap?
 (defcustom esw/key-direction-mappings
   '((">" . right)
     ("<" . left)
@@ -69,26 +68,28 @@
   :group 'es-windows
   :type 'sexp)
 
-(defun esw/user-input-regex ()
-  (let ((keys (if (char-equal (aref (caar esw/key-direction-mappings) 0) ?^ )
-                  (mapconcat 'car (reverse esw/key-direction-mappings) "")
-                (mapconcat 'car esw/key-direction-mappings ""))))
-    ;; FIXME: What about "[" and "]"? Should I abandon regex altogether?
-    (format "^ *\\([^%s]+\\)?\\([%s]\\)? *$"
-            keys keys)))
-
 (defun esw/parse-user-input (input-string)
   (setq input-string
-        (progn (match-string "^ *.+")))
-  (let ((st)))
-  (let ((keys (if (char-equal (aref (caar esw/key-direction-mappings) 0) ?^ )
-                  (mapconcat 'car (reverse esw/key-direction-mappings) "")
-                (mapconcat 'car esw/key-direction-mappings ""))))
-    ;; FIXME: What about "[" and "]"? Should I abandon regex altogether?
-    (format "^ *\\([^%s]+\\)?\\([%s]\\)? *$"
-            keys keys)))
+        (progn (string-match "^ *\\(.*?\\) *$" input-string)
+               (match-string 1 input-string)))
+  (let* (( keys (mapcar 'string-to-char
+                        (mapcar 'car
+                                esw/key-direction-mappings)))
+         ( divider
+           (cl-loop with counter = 0
+                    while (and (< counter (length input-string))
+                               (not (memq (aref input-string counter) keys)))
+                    do (cl-incf counter)
+                    finally (cl-return counter)
+                    )))
+    (cons (when (< 0 (length (substring input-string 0 divider)))
+            (substring input-string 0 divider))
+          (when (< 0 (length (substring input-string divider)))
+            (substring input-string divider)))
+    ))
 
-(defvar esw/window-id-mappings nil)
+(defvar esw/window-id-mappings nil
+  "Internal variable, meant to by bound dynamically.")
 
 (defvar esw/help-message "
 Each number represents an emacs window. Windows followed by H or V, are
@@ -194,9 +195,9 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
            (save-excursion
              (goto-char (length (minibuffer-prompt)))
              (buffer-substring (point) (point-max))))
-         ( buffer-id (progn (string-match (esw/user-input-regex)
-                                          input-string)
-                            (match-string 1 input-string)))
+         ( parsed-input (esw/parse-user-input input-string))
+
+         ( buffer-id (car parsed-input))
          ( selected-window
            (car (rassoc buffer-id esw/window-id-mappings)))
          ( windows-to-mark
@@ -254,7 +255,6 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 
 (cl-defun esw/select-window (&optional prompt no-splits)
   (interactive)
-  (setq no-splits t)
   (unless prompt
     (setq prompt
           (if (and (not no-splits) esw/be-helpful)
@@ -293,7 +293,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
          selected-window)
 
     (unwind-protect
-         (let (user-input)
+         (let (user-input parsed-input)
            (setq buffers (mapcar cover-window windows))
            (if no-splits
                (setq user-input
@@ -305,14 +305,14 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              (let (( minibuffer-setup-hook
                      (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
                (setq user-input (read-string prompt))))
-           (string-match (esw/user-input-regex) user-input)
+           (setq parsed-input (esw/parse-user-input user-input))
            (setq selected-window
-                 (if (match-string 1 user-input)
-                     (or (car (rassoc (match-string 1 user-input)
+                 (if (car parsed-input)
+                     (or (car (rassoc (car parsed-input)
                                       esw/window-id-mappings))
                          (user-error "Not a valid window"))
                    (car all-windows)))
-           (setq user-input-split (match-string 2 user-input)))
+           (setq user-input-split (cdr parsed-input)))
       (cl-dolist (buffer buffers)
         (ignore-errors
           (kill-buffer buffer)))
