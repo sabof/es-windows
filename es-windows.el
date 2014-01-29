@@ -98,8 +98,7 @@
          (ignore-errors
            (kill-buffer buffer)))
        (esw/restore-windows spec))))
-(put 'esw/with-covered-windows 'common-lisp-indent-function
-     '(1 &body))
+(put 'esw/with-covered-windows 'common-lisp-indent-function 1)
 
 (defvar esw/window-id-mappings nil
   "Internal variable, meant to by bound dynamically.")
@@ -181,7 +180,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
              (propertize (cdr (assoc window esw/window-id-mappings))
                          'face 'esw/label-face)
              (esw/window-type window)))))
-    (if (and (eq 'label-type 'full)
+    (if (and label-type
              (not (esw/window-side-p window)))
         (concat (mapconcat segment-label
                            (esw/window-lineage window)
@@ -200,9 +199,6 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     (with-current-buffer buffer
       (setq major-mode 'esw/cover-mode)
       (insert (esw/cover-label label-type window))
-      (cl-con label-type
-              (simple 1))
-      (insert label-type)
       (goto-char (point-min))
       (setq cursor-type nil)
       (setq buffer-read-only t)
@@ -305,8 +301,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
          user-input-split
          selected-window)
 
-    (esw/with-covered-windows (apply-partially 'esw/cover-window
-                                               (if no-splits 'simple 'full))
+    (esw/with-covered-windows
+        (apply-partially 'esw/cover-window (not no-splits))
       (let (user-input parsed-input)
         (if no-splits
             (setq user-input
