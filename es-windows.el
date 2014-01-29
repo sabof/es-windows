@@ -54,7 +54,7 @@
   :group 'es-windows
   :type 'boolean)
 
-(defcustom esw/colorize-selection t
+(defcustom esw/show-selection t
   "Whether to dynamically colorize the selected window."
   :group 'es-windows
   :type 'boolean)
@@ -200,7 +200,10 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
             (concat
              (propertize (cdr (assoc window esw/window-id-mappings))
                          'face 'esw/label-face)
-             (esw/window-type window)))))
+             (cond ( (window-left-child window)
+                     "H")
+                   ( (window-top-child window)
+                     "V"))))))
     (if (and full-label
              (not (esw/window-side-p window)))
         (concat (mapconcat segment-label
@@ -227,12 +230,6 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
         (set-window-dedicated-p window nil))
       (set-window-buffer window buffer)
       buffer)))
-
-(defun esw/window-type (window)
-  (cond ( (window-left-child window)
-          "H")
-        ( (window-top-child window)
-          "V")))
 
 (defun esw/window-state (window)
   "Get the state of a window.
@@ -305,7 +302,7 @@ with `esw/set-window-state'."
     (define-key esw/minibuffer-split-mode-map
         (kbd (car mapping))
       'self-insert-and-exit))
-  (when esw/colorize-selection
+  (when esw/show-selection
     (add-hook 'post-command-hook 'esw/mark-windows nil t)))
 
 ;; Test:
