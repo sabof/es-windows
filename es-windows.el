@@ -82,7 +82,7 @@ The macro has no effect otherwise."
 (put 'esw/with-protected-layout 'common-lisp-indent-function '(&body))
 
 (defvar esw/with-covered-windows nil)
-(defmacro esw/with-covered-windows (cover-window-func &rest body)
+(defmacro esw/with-covered-windows (mappings cover-window-func &rest body)
   "Cover all windows, using COVER-WIDOW-FUNC.
 The windows will be covered only once - the macro has no effect, if it's used
 recursively.
@@ -90,6 +90,7 @@ recursively.
   `(if esw/with-covered-windows
        (progn ,@body)
      (let (( esw/with-covered-windows t)
+           ( esw/window-id-mappings ,mappings)
            ( spec (esw/save-windows))
            buffers)
        (unwind-protect
@@ -99,7 +100,7 @@ recursively.
            (ignore-errors
              (kill-buffer buffer)))
          (esw/restore-windows spec)))))
-(put 'esw/with-covered-windows 'common-lisp-indent-function 1)
+(put 'esw/with-covered-windows 'common-lisp-indent-function 2)
 
 (defun esw/parse-user-input (input-string)
   (setq input-string
@@ -315,36 +316,35 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
       (with-current-buffer (window-buffer window)
         (eobp)))))
 
-(cl-defun esw/select-window (&optional prompt no-splits simple-labels)
-  (interactive)
-  ;; FIXME: Implement simple-labels
+(cl-defun esw/select-window (&optional prompt show-internal-windows allow-splitting)
+  (interactive (list nil t t))
   (unless prompt
     (setq prompt
-          (if (and (not no-splits) esw/be-helpful)
+          (if (and allow-splitting esw/be-helpful)
               (format "Select a window (type a large number followed by %s or RET): "
                       (mapconcat 'car esw/key-direction-mappings ", "))
             "Select window: ")))
-  (let* (( all-windows (if no-splits
-                           (esw/window-list)
-                         (esw/internal-window-list)))
-         ( esw/window-id-mappings
-           (cl-mapcar 'cons all-windows (esw/shortcuts)))
+  (let* (( all-windows
+           (if show-internal-windows
+               (esw/internal-window-list)
+             (esw/window-list)))
          user-input-split
          selected-window)
 
     (esw/with-covered-windows
-        (apply-partially 'esw/cover-window (not no-splits))
+        (cl-mapcar 'cons all-windows (esw/shortcuts))
+        (apply-partially 'esw/cover-window show-internal-windows)
       (let (user-input parsed-input)
-        (if no-splits
-            (setq user-input
-                  (condition-case ignore
-                      (char-to-string
-                       (event-basic-type
-                        (read-event (or prompt "Select window: "))))
-                    (error (user-error "Not a valid window"))))
-          (let (( minibuffer-setup-hook
-                  (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
-            (setq user-input (read-string prompt))))
+        (if allow-splitting
+            (let (( minibuffer-setup-hook
+                    (cons 'esw/minibuffer-mode minibuffer-setup-hook)))
+              (setq user-input (read-string prompt)))
+          (setq user-input
+                (condition-case nil
+                    (char-to-string
+                     (event-basic-type
+                      (read-event (or prompt "Select window: "))))
+                  (error (user-error "Not a valid window")))))
         (setq parsed-input (esw/parse-user-input user-input))
         (setq selected-window
               (if (car parsed-input)
@@ -354,23 +354,24 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                 (car all-windows)))
         (setq user-input-split (cdr parsed-input))))
 
-    (if user-input-split
-        (setq selected-window
-              (split-window selected-window
-                            nil
-                            (cdr (assoc user-input-split
-                                        esw/key-direction-mappings))))
-      (while (esw/window-children selected-window)
-        (let ((children (esw/window-children selected-window)))
-          (mapc 'delete-window (cl-rest children))
-          (setq selected-window (car children)))
-        (set-window-dedicated-p selected-window nil)))
+    (esw/with-protected-layout
+      (if user-input-split
+          (setq selected-window
+                (split-window selected-window
+                              nil
+                              (cdr (assoc user-input-split
+                                          esw/key-direction-mappings))))
+        (while (esw/window-children selected-window)
+          (let ((children (esw/window-children selected-window)))
+            (mapc 'delete-window (cl-rest children))
+            (setq selected-window (car children)))
+          (set-window-dedicated-p selected-window nil))))
     (select-window selected-window)
     selected-window))
 
 (defun esw/show-buffer (buffer)
   (interactive (list (get-buffer-create (read-buffer "Choose buffer: "))))
-  (set-window-buffer (esw/select-window) buffer))
+  (set-window-buffer (esw/select-window nil t t) buffer))
 
 (defun esw/move-window (window)
   "Show current buffer in a different window, and delete the old window."
@@ -379,7 +380,7 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     (user-error "Can't delete window"))
   (let* (( ori-window window)
          ( buffer (window-buffer ori-window))
-         ( new-window (esw/select-window)))
+         ( new-window (esw/select-window nil t t)))
     (unless (eq new-window ori-window)
       (set-window-buffer new-window buffer)
       (delete-window ori-window))))
@@ -387,18 +388,18 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
 (defun esw/delete-window ()
   "Choose and delete a window."
   (interactive)
-  (delete-window (esw/select-window nil t)))
+  (esw/with-protected-layout
+    (delete-window (esw/select-window "Delete window: " t))))
 
 (defun esw/swap-two-windows ()
   "Choose and swap two window."
   (interactive)
-  (let* (( esw/window-id-mappings
-           (cl-mapcar 'cons (esw/window-list) (esw/shortcuts)))
-         window1 window2 window1-state window2-state)
+  (let* (window1 window2 window1-state window2-state)
     (esw/with-covered-windows
+        (cl-mapcar 'cons (esw/window-list) (esw/shortcuts))
         (apply-partially 'esw/cover-window nil)
-      (setq window1 (esw/select-window "Select first window: " t))
-      (setq window2 (esw/select-window "Select second window: " t)))
+      (setq window1 (esw/select-window "Select first window: "))
+      (setq window2 (esw/select-window "Select second window: ")))
     (esw/with-protected-layout
       (setq window1-state (esw/window-state window1))
       (setq window2-state (esw/window-state window2))
