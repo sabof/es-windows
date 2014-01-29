@@ -88,16 +88,23 @@
             (substring input-string divider)))
     ))
 
+(defvar esw/with-covered-windows nil)
 (defmacro esw/with-covered-windows (cover-window-func &rest body)
-  `(let (( spec (esw/save-windows))
-         buffers)
-     (unwind-protect
-          (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
-                 ,@body)
-       (cl-dolist (buffer buffers)
-         (ignore-errors
-           (kill-buffer buffer)))
-       (esw/restore-windows spec))))
+  "Cover all windows, using COVER-WIDOW-FUNC.
+The windows will be covered only once - the macro has no effect, if it's used
+recursively."
+  `(if esw/with-covered-windows
+       (progn ,@body)
+     (let (( esw/with-covered-windows t)
+           ( spec (esw/save-windows))
+           buffers)
+       (unwind-protect
+            (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
+                   ,@body)
+         (cl-dolist (buffer buffers)
+           (ignore-errors
+             (kill-buffer buffer)))
+         (esw/restore-windows spec)))))
 (put 'esw/with-covered-windows 'common-lisp-indent-function 1)
 
 (defvar esw/window-id-mappings nil
@@ -173,14 +180,14 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
   (cl-remove-if 'esw/window-side-parent-p
                 (window-list nil nil (frame-first-window))))
 
-(defun esw/cover-label (label-type window)
+(defun esw/cover-label (full-label window)
   (let (( segment-label
           (lambda (window)
             (concat
              (propertize (cdr (assoc window esw/window-id-mappings))
                          'face 'esw/label-face)
              (esw/window-type window)))))
-    (if (and label-type
+    (if (and full-label
              (not (esw/window-side-p window)))
         (concat (mapconcat segment-label
                            (esw/window-lineage window)
@@ -192,13 +199,13 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
                                      ", "))))
       (funcall segment-label window))))
 
-(defun esw/cover-window (label-type window)
+(defun esw/cover-window (full-label window)
   (let (( buffer (generate-new-buffer
                   (buffer-name
                    (window-buffer window)))))
     (with-current-buffer buffer
       (setq major-mode 'esw/cover-mode)
-      (insert (esw/cover-label label-type window))
+      (insert (esw/cover-label full-label window))
       (goto-char (point-min))
       (setq cursor-type nil)
       (setq buffer-read-only t)
