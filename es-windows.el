@@ -75,13 +75,13 @@
   "An error within the body of this macro will cause the window layout to be restored.
 Should this happen, the same (or possibly another) will continue unwinding the stack.
 Without errors, the macro has no effect."
+  (declare (indent 0))
   `(let ((spec (esw/layout-state)))
      (condition-case error
          (progn ,@body)
        (error (esw/set-layout-state spec)
               (signal (car error) (cdr error))))))
 (put 'esw/with-protected-layout 'common-lisp-indent-function '(&body))
-;; FIXME: add elisp indent spec
 
 (defvar esw/with-covered-windows nil)
 (defmacro esw/with-covered-windows (mappings cover-window-func &rest body)
@@ -89,6 +89,7 @@ Without errors, the macro has no effect."
 The windows will be covered only once - the macro has no effect, if it's used
 recursively.
 `esw/window-id-mappings' must be dynamically bound when it's evoked."
+  (declare (indent 2))
   `(if esw/with-covered-windows
        (progn ,@body)
      (let (( esw/with-covered-windows t)
@@ -96,8 +97,8 @@ recursively.
            ( spec (esw/layout-state))
            buffers)
        (unwind-protect
-            (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
-                   ,@body)
+           (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
+                  ,@body)
          (cl-dolist (buffer buffers)
            (ignore-errors
              (kill-buffer buffer)))
