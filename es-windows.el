@@ -73,7 +73,7 @@
 
 (defmacro esw/with-protected-layout (&rest body)
   "An error within the body of this macro will cause the window layout to be restored.
-Should this happen, the same (or possibly another) will continue unwinding the stack.
+Should this happen, the same (or, should restoration fail, another) error will continue unwinding the stack.
 Without errors, the macro has no effect."
   (declare (indent 0))
   `(let ((spec (esw/layout-state)))
