@@ -75,6 +75,7 @@
   "An error within the body of this macro will cause the window layout to be restored.
 Should this happen, the same (or, should restoration fail, another) error will continue unwinding the stack.
 Without errors, the macro has no effect."
+  ;; FIXME: Use gensyms
   (declare (indent 0))
   `(let ((spec (esw/layout-state)))
      (condition-case error
@@ -85,6 +86,8 @@ Without errors, the macro has no effect."
 
 (defvar esw/with-covered-windows nil)
 (defmacro esw/with-covered-windows (mappings cover-window-func &rest body)
+  ;; FIXME: Update doc
+  ;; FIXME: Use gensyms
   "Cover all windows, using COVER-WIDOW-FUNC.
 The windows will be covered only once - the macro has no effect, if it's used
 recursively.
@@ -270,7 +273,17 @@ with `esw/set-window-state'."
       (when eobp (esw/window-goto-eob window))
       (set-window-dedicated-p window dedicated))))
 
-(cl-defun esw/mark-windows ()
+(defun esw/mark-window (window state)
+  (with-current-buffer (window-buffer window)
+    (when (eq major-mode 'esw/cover-mode)
+      (if state
+          (face-remap-add-relative
+           'default 'esw/selection-face)
+        (face-remap-remove-relative
+         '(default . esw/selection-face))
+        ))))
+
+(cl-defun esw/minibuffer-post-command-hook ()
   (let* (( input-string
            (save-excursion
              (goto-char (length (minibuffer-prompt)))
@@ -285,15 +298,12 @@ with `esw/set-window-state'."
              (cl-remove-if 'esw/window-children
                            (esw/internal-window-list
                             selected-window)))))
-    (cl-dolist (window (window-list))
-      (with-current-buffer (window-buffer window)
-        (when (eq major-mode 'esw/cover-mode)
-          (if (memq window windows-to-mark)
-              (face-remap-add-relative
-               'default 'esw/selection-face)
-            (face-remap-remove-relative
-             '(default . esw/selection-face))
-            ))))))
+    (if (esw/window-side-p selected-window)
+        (exit-minibuffer)
+      (when esw/show-selection
+        (cl-dolist (window (window-list))
+          (esw/mark-window window (memq window windows-to-mark))
+          )))))
 
 (define-minor-mode esw/minibuffer-split-mode
     "Adds splitting keybindings to the minibuffer."
@@ -303,8 +313,7 @@ with `esw/set-window-state'."
     (define-key esw/minibuffer-split-mode-map
         (kbd (car mapping))
       'self-insert-and-exit))
-  (when esw/show-selection
-    (add-hook 'post-command-hook 'esw/mark-windows nil t)))
+  (add-hook 'post-command-hook 'esw/minibuffer-post-command-hook nil t))
 
 ;; Test:
 ;; while true; do date; sleep 0.3; done
@@ -322,6 +331,7 @@ with `esw/set-window-state'."
         (eobp)))))
 
 (cl-defun esw/select-window (&optional prompt show-internal-windows allow-splitting)
+  ;; FIXME: Write doc
   (interactive (list nil t t))
   (unless prompt
     (setq prompt
@@ -375,6 +385,7 @@ with `esw/set-window-state'."
     selected-window))
 
 (defun esw/show-buffer (buffer)
+  "Show the selected buffer in the selected window."
   (interactive (list (get-buffer-create (read-buffer "Choose buffer: "))))
   (set-window-buffer (esw/select-window nil t t) buffer))
 
@@ -397,13 +408,14 @@ with `esw/set-window-state'."
     (delete-window (esw/select-window "Delete window: " t))))
 
 (defun esw/swap-two-windows ()
-  "Choose and swap two window."
+  "Choose and swap two windows."
   (interactive)
   (let* (window1 window2 window1-state window2-state)
     (esw/with-covered-windows
         (cl-mapcar 'cons (esw/window-list) (esw/shortcuts))
         (apply-partially 'esw/cover-window nil)
       (setq window1 (esw/select-window "Select first window: "))
+      (esw/mark-window window1 t)
       (setq window2 (esw/select-window "Select second window: ")))
     (esw/with-protected-layout
       (setq window1-state (esw/window-state window1))
