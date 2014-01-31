@@ -1,5 +1,5 @@
 # es-windows
-This package allows "advanced" layout manipulations with three key presses. In an arbitrary layout, it can swap two windows, make a window occupy the full side of a frame, which is impractical using standard commands. It also provides a conveninet API for creating interactive layout manipulation commands. The interface is based on Dimitri Fontaine's `switch-window`
+This package allows "advanced" layout manipulations with three key presses. In an arbitrary layout, it can swap two windows, make a window occupy the full side of a frame, and perform other operations which are impractical using standard commands. It also provides a conveninet API for creating interactive layout manipulation commands. The interface is based on Dimitri Fontaine's `switch-window`
 
 The follwing commands are available:
 
@@ -9,14 +9,16 @@ The follwing commands are available:
 - esw/swap-two-windows
 - esw/delete-window
 
-`esw/select-window` is the core function, the other being wrappers.
+## esw/select-window
+This is the core function. The other functions are wrappers.
 
-### Example (with 4^ input)
+##### Example (with 4^ input)
 
+<!-- FIXME: Change to a single gif -->
 ![screenshot1](https://github.com/sabof/es-windows/raw/master/screenshot1.png)
 ![screenshot2](https://github.com/sabof/es-windows/raw/master/screenshot2.png)
 
-### Instructions
+##### Instructions
 
 Each number represents an emacs window. Windows followed by H or V, are
 internal Horizontal or Vertical splitters. The last window is an external
