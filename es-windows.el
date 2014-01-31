@@ -73,8 +73,8 @@
 
 (defmacro esw/with-protected-layout (&rest body)
   "An error within the body of this macro will cause the window layout to be restored.
-Should this happen, the same (or, should restoration fail, another) error will continue unwinding the stack.
-Without errors, the macro has no effect."
+Should this happen, the same (or should restoration fail, another) error will
+continue unwinding the stack. Without errors, the macro has no effect."
   (declare (indent 0))
   (let (( spec (cl-gensym)))
     `(let ((,spec (esw/layout-state)))
@@ -186,6 +186,9 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
             collect the-window)))
 
 (cl-defun esw/internal-window-list (&optional (window (frame-root-window)))
+  "Provides a list of internal and external windows, starting from WINDOW,
+which defaults to the frame root window. Windows that can neither be split or
+shown are excluded."
   (let (( result (list window))
         ( fringe (list window))
         new-fringe)
@@ -201,8 +204,8 @@ To prevent this message from showing, set `esw/be-helpful' to `nil'")
     ))
 
 (defun esw/window-list ()
-  (cl-remove-if 'esw/window-side-parent-p
-                (window-list nil nil (frame-first-window))))
+  "Provides a list of visible windows."
+  (window-list nil nil (frame-first-window)))
 
 (defun esw/cover-label (full-label window)
   (let (( segment-label

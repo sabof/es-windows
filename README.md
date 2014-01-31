@@ -1,5 +1,15 @@
 # es-windows
-At the moment provides the functions `esw/select-window`, `esw/move-window` and `esw/show-buffer`, which allow the selection and splitting of any window (including internal windows) in two keypresses. Based on `switch-window` by Dimitri Fontaine.
+This package allows "advanced" layout manipulations with three key presses. In an arbitrary layout, it can swap two windows, make a window occupy the full side of a frame, which is impractical using standard commands. It also provides a conveninet API for creating interactive layout manipulation commands. The interface is based on Dimitri Fontaine's `switch-window`
+
+The follwing commands are available:
+
+- esw/select-window
+- esw/move-window
+- esw/show-buffer
+- esw/swap-two-windows
+- esw/delete-window
+
+`esw/select-window` is the core function, the other being wrappers.
 
 ### Example (with 4^ input)
 
