@@ -75,37 +75,43 @@
   "An error within the body of this macro will cause the window layout to be restored.
 Should this happen, the same (or, should restoration fail, another) error will continue unwinding the stack.
 Without errors, the macro has no effect."
-  ;; FIXME: Use gensyms
   (declare (indent 0))
-  `(let ((spec (esw/layout-state)))
-     (condition-case error
-         (progn ,@body)
-       (error (esw/set-layout-state spec)
-              (signal (car error) (cdr error))))))
+  (let (( spec (cl-gensym)))
+    `(let ((,spec (esw/layout-state)))
+       (condition-case error
+           (progn ,@body)
+         (error (esw/set-layout-state ,spec)
+                (signal (car error) (cdr error)))))))
 (put 'esw/with-protected-layout 'common-lisp-indent-function '(&body))
 
 (defvar esw/with-covered-windows nil)
 (defmacro esw/with-covered-windows (mappings cover-window-func &rest body)
-  ;; FIXME: Update doc
-  ;; FIXME: Use gensyms
-  "Cover all windows, using COVER-WIDOW-FUNC.
+  "Cover all windows, using MAPPINGS and COVER-WIDOW-FUNC.
+
+MAPPINGS should be an alist of format \(\(\"label\" . <window>\)\),
+It should include internal windows, if `esw/select-window' needs to be aware of them.
+
+COVER-WINDOW-FUNC is a function taking one paraneter, WINDOW,
+that will place a buffer in front of if, and return it.
+
 The windows will be covered only once - the macro has no effect, if it's used
-recursively.
-`esw/window-id-mappings' must be dynamically bound when it's evoked."
+recursively."
   (declare (indent 2))
-  `(if esw/with-covered-windows
-       (progn ,@body)
-     (let (( esw/with-covered-windows t)
-           ( esw/window-id-mappings ,mappings)
-           ( spec (esw/layout-state))
-           buffers)
-       (unwind-protect
-           (progn (setq buffers (mapcar ,cover-window-func (esw/window-list)))
-                  ,@body)
-         (cl-dolist (buffer buffers)
-           (ignore-errors
-             (kill-buffer buffer)))
-         (esw/set-layout-state spec)))))
+  (let (( spec (cl-gensym))
+        ( buffers (cl-gensym)))
+    `(if esw/with-covered-windows
+         (progn ,@body)
+       (let (( esw/with-covered-windows t)
+             ( esw/window-id-mappings ,mappings)
+             ( ,spec (esw/layout-state))
+             ,buffers)
+         (unwind-protect
+             (progn (setq ,buffers (mapcar ,cover-window-func (esw/window-list)))
+                    ,@body)
+           (cl-dolist (buffer ,buffers)
+             (ignore-errors
+               (kill-buffer buffer)))
+           (esw/set-layout-state ,spec))))))
 (put 'esw/with-covered-windows 'common-lisp-indent-function 2)
 
 (defun esw/parse-user-input (input-string)
@@ -298,7 +304,8 @@ with `esw/set-window-state'."
              (cl-remove-if 'esw/window-children
                            (esw/internal-window-list
                             selected-window)))))
-    (if (esw/window-side-p selected-window)
+    (if (and (windowp selected-window)
+             (not (esw/window-splittable-p selected-window)))
         (exit-minibuffer)
       (when esw/show-selection
         (cl-dolist (window (window-list))
@@ -331,7 +338,12 @@ with `esw/set-window-state'."
         (eobp)))))
 
 (cl-defun esw/select-window (&optional prompt show-internal-windows allow-splitting)
-  ;; FIXME: Write doc
+  "Query for a window using PROMPT, select and return it.
+
+If SHOW-INTERNAL-WINDOWS is non-nil, show their labels, and accept them as input.
+If an internal window is selected, it's children will be deleted.
+
+If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
   (interactive (list nil t t))
   (unless prompt
     (setq prompt
