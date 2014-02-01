@@ -347,7 +347,7 @@ If SHOW-INTERNAL-WINDOWS is non-nil, show their labels, and accept them as input
 If an internal window is selected, it's children will be deleted.
 
 If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
-  (interactive (list nil t t))
+  (interactive (list nil current-prefix-arg current-prefix-arg))
   (unless prompt
     (setq prompt
           (if (and allow-splitting esw/be-helpful)
@@ -360,6 +360,16 @@ If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
              (esw/window-list)))
          user-input-split
          selected-window)
+
+    (unless allow-splitting
+      (cl-case (length all-windows)
+        ( 1 (cl-return-from esw/select-window
+              (selected-window)))
+        ( 2 (let (( other-window (car (remq (selected-window) all-windows))))
+              (unless (esw/window-children other-window)
+                (select-window other-window)
+                (cl-return-from esw/select-window
+                  other-window))))))
 
     (esw/with-covered-windows
         (cl-mapcar 'cons all-windows (esw/shortcuts))
