@@ -200,7 +200,7 @@ shown are excluded."
             (cl-callf append new-fringe children))))
       (setq fringe new-fringe
             new-fringe nil))
-    (cl-remove-if 'esw/window-side-parent-p result)
+    (cl-delete-if 'esw/window-side-parent-p result)
     ))
 
 (defun esw/window-list ()
@@ -304,7 +304,7 @@ with `esw/set-window-state'."
            (car (rassoc buffer-id esw/window-id-mappings)))
          ( windows-to-mark
            (when selected-window
-             (cl-remove-if 'esw/window-children
+             (cl-delete-if 'esw/window-children
                            (esw/internal-window-list
                             selected-window)))))
     (if (and (windowp selected-window)
