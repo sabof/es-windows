@@ -340,6 +340,7 @@ with `esw/set-window-state'."
       (with-current-buffer (window-buffer window)
         (eobp)))))
 
+;;;###autoload
 (cl-defun esw/select-window (&optional prompt show-internal-windows allow-splitting)
   "Query for a window using PROMPT, select and return it.
 
@@ -409,11 +410,13 @@ If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
     (select-window selected-window)
     selected-window))
 
+;;;###autoload
 (defun esw/show-buffer (buffer)
   "Show the selected buffer in the selected window."
   (interactive (list (get-buffer-create (read-buffer "Choose buffer: "))))
   (set-window-buffer (esw/select-window nil t t) buffer))
 
+;;;###autoload
 (defun esw/move-window (window)
   "Show current buffer in a different window, and delete the old window."
   (interactive (list (selected-window)))
@@ -426,12 +429,14 @@ If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
       (set-window-buffer new-window buffer)
       (delete-window ori-window))))
 
+;;;###autoload
 (defun esw/delete-window ()
   "Choose and delete a window."
   (interactive)
   (esw/with-protected-layout
     (delete-window (esw/select-window "Delete window: " t))))
 
+;;;###autoload
 (defun esw/swap-two-windows ()
   "Choose and swap two windows."
   (interactive)
