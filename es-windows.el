@@ -348,7 +348,7 @@ If SHOW-INTERNAL-WINDOWS is non-nil, show their labels, and accept them as input
 If an internal window is selected, it's children will be deleted.
 
 If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
-  (interactive (list nil current-prefix-arg current-prefix-arg))
+  (interactive (list nil t t))
   (unless prompt
     (setq prompt
           (if (and allow-splitting esw/be-helpful)
