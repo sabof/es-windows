@@ -294,9 +294,7 @@ with `esw/set-window-state'."
 
 (cl-defun esw/minibuffer-post-command-hook ()
   (let* (( input-string
-           (save-excursion
-             (goto-char (length (minibuffer-prompt)))
-             (buffer-substring (point) (point-max))))
+           (buffer-substring (minibuffer-prompt-end) (point-max)))
          ( parsed-input (esw/parse-user-input input-string))
 
          ( buffer-id (car parsed-input))
