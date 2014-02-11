@@ -217,8 +217,7 @@ shown are excluded."
                      "H")
                    ( (window-top-child window)
                      "V"))))))
-    (if (and full-label
-             (not (esw/window-side-p window)))
+    (if (and full-label (not (esw/window-side-p window)))
         (concat (mapconcat segment-label
                            (esw/window-lineage window)
                            " ")
@@ -400,11 +399,12 @@ If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
                               nil
                               (cdr (assoc user-input-split
                                           esw/key-direction-mappings))))
-        (while (esw/window-children selected-window)
-          (let ((children (esw/window-children selected-window)))
-            (mapc 'delete-window (cl-rest children))
-            (setq selected-window (car children)))
-          (set-window-dedicated-p selected-window nil))))
+        (when (esw/window-children selected-window)
+          (let* ((windows (cdr (esw/internal-window-list selected-window)))
+                 (live-windows (cl-remove-if-not 'window-live-p windows)))
+            (mapc 'delete-window (cdr live-windows))
+            (setq selected-window (car live-windows))
+            (set-window-dedicated-p selected-window nil)))))
     (select-window selected-window)
     selected-window))
 
