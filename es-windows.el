@@ -1,6 +1,6 @@
 ;;; es-windows.el --- Window-management utilities -*- lexical-binding: t -*-
 
-;;; Version: 0.2
+;;; Version: 0.3
 ;;; Author: sabof
 ;;; URL: https://github.com/sabof/es-windows
 ;;; Package-Requires: ((cl-lib "0.3") (emacs "24"))
