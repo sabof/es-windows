@@ -1,7 +1,9 @@
 # es-windows
-This package allows "advanced" layout manipulations with three key presses. In an arbitrary layout, it can swap two windows, make a window occupy the full side of a frame, and perform other operations which are impractical using standard commands. It also provides a conveninet API for creating interactive layout manipulation commands. The interface is based on Dimitri Fontaine's `switch-window`
+![screenshot1](https://github.com/sabof/es-windows/raw/master/screencast.gif)
 
-The follwing commands are available:
+This package provides user-access to internal Emacs windows, and an API for querying using it's interface. It's an extension Dimitri Fontaine's `switch-window`.
+
+The follwing commands are available. `esw/select-window` is the core function, and the others are wrappers around it.
 
 - esw/select-window
 - esw/move-window
@@ -9,23 +11,15 @@ The follwing commands are available:
 - esw/swap-two-windows
 - esw/delete-window
 
-## esw/select-window
-This is the core function. The other functions are wrappers.
-
 ##### Example (with 4^ input)
 
-<!-- FIXME: Change to a single gif -->
 ![screenshot1](https://github.com/sabof/es-windows/raw/master/screenshot1.png)
 ![screenshot2](https://github.com/sabof/es-windows/raw/master/screenshot2.png)
 
-##### Instructions
+##### How to use
 
-Each number represents an emacs window. Windows followed by H or V, are
-internal Horizontal or Vertical splitters. The last window is an external
-window, showing a buffer.
+Each number represents a window. Windows followed by H or V, are internal Horizontal or Vertical splitters. The last window is an external window, showing a buffer.
 
-Type the number of the window you want, followed by RET, and that window will be
-used. You can also type ^, >, v, or < instead of RET, in which case the window
-will be split in that direction.
+First you need to select a window on which to operate, by entering it's number. RET will select it. ^, >, v, and < will split it.
 
-If no window is provided, the closest to root window will be used.
+It's also possible to enter an operation without specifying a window, in which case the root window will be used.
