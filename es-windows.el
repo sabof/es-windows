@@ -356,6 +356,7 @@ If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
            (if show-internal-windows
                (esw/internal-window-list)
              (esw/window-list)))
+         ( initial-window (selected-window))
          user-input-split
          selected-window)
 
@@ -400,8 +401,9 @@ If ALLOW-SPLITTING is non-nil, provide the user an option to split windows."
                               (cdr (assoc user-input-split
                                           esw/key-direction-mappings))))
         (when (esw/window-children selected-window)
-          (let* ((windows (cdr (esw/internal-window-list selected-window)))
-                 (live-windows (cl-remove-if-not 'window-live-p windows)))
+          (let* (( windows (cdr (esw/internal-window-list selected-window)))
+                 ( live-windows (sort (cl-remove-if-not 'window-live-p windows)
+                                      (lambda (a b) (eq initial-window a)))))
             (mapc 'delete-window (cdr live-windows))
             (setq selected-window (car live-windows))
             (set-window-dedicated-p selected-window nil)))))
