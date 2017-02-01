@@ -33,4 +33,4 @@ Add the following code to your init.el:
 
 From helm-find-files, helm-buffer-list, helm-mini, helm-projectile (buffers and files), use *C-c C-w* to call esw to select the target window.
 
-[screenshot4](https://github.com/kassick/es-windows/raw/master/esw-helm-screencast.webm)
+![screenshot4](https://github.com/kassick/es-windows/raw/master/esw-helm-screencast.webm)
