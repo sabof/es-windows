@@ -23,3 +23,14 @@ Each number represents a window. Windows followed by H or V, are internal Horizo
 First you need to select a window on which to operate, by entering it's number. RET will select it. ^, >, v, and < will split it.
 
 It's also possible to enter an operation without specifying a window, in which case the root window will be used.
+
+##### Integration with helm
+
+Add the following code to your init.el:
+```elisp
+(require 'esw-helm)
+```
+
+From helm-find-files, helm-buffer-list, helm-mini, helm-projectile (buffers and files), use *C-c C-w* to call esw to select the target window.
+
+![screenshot4](https://github.com/kassick/es-windows/raw/master/esw-helm-screencast2.gif)
